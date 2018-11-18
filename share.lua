@@ -17,7 +17,6 @@ Methods.__isNode = true
 local proxies = setmetatable({}, { mode = 'k' })
 
 
--- For `pairs(node)`
 local oldPairs = pairs
 function pairs(t)
     local proxy = proxies[t]
@@ -25,6 +24,14 @@ function pairs(t)
     return oldPairs(proxy.children)
 end
 local pairs = oldPairs
+
+local oldIPairs = ipairs
+function ipairs(t)
+    local proxy = proxies[t]
+    if not proxy then return oldIPairs(t) end
+    return oldIPairs(proxy.children)
+end
+local ipairs = oldIPairs
 
 
 local function adopt(parent, name, t)

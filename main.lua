@@ -23,6 +23,11 @@ print(serpent.block(share:__flush()))
 for k, v in pairs({ a = 1, b = 2}) do
     print(k, tostring(v))
 end
+
 for k, v in pairs(share.kek) do
     print(k, tostring(v))
+end
+
+for i = 1, #share.kek.arr do
+    print(share.kek.arr[i])
 end
