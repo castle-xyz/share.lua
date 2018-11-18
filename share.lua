@@ -21,17 +21,14 @@ local function adopt(parent, name, t)
         assert(t.__parent.__children[t.__name] ~= t, 'tried to adopt an adopted node')
         node = t
     else -- New node
+        assert(not getmetatable(t), 'tried to adopt a table that has a metatable')
         node = {}
+        local meta = {}
 
         -- Create the `.__children` table as our `__index`, with a final lookup in `Methods`
         local grandchildren = setmetatable({}, { __index = Methods })
         node.__children = grandchildren
-        setmetatable(node, {
-            __index = grandchildren,
-            __newindex = newIndex,
-            __len = function() return #grandchildren end,
-            __pairs = function() return pairs(grandchildren) end
-        })
+        meta.__index = grandchildren
 
         -- Copy everything, recursively adopting child tables
         for k, v in pairs(t) do
@@ -42,9 +39,33 @@ local function adopt(parent, name, t)
             end
         end
 
+        -- Forward `#node` -- TODO(nikki): This needs -DLUAJIT_ENABLE_LUA52COMPAT
+        function meta.__len()
+            return #grandchildren
+        end
+
+        -- Forward `pairs(node)` -- TODO(nikki): This needs -DLUAJIT_ENABLE_LUA52COMPAT
+        function meta.__pairs()
+            return pairs(grandchildren)
+        end
+
+        -- Listen for `node[k] = v`
+        function meta.__newindex(t, k, v)
+            print(node:__path(), '<-', k, '<-', tostring(v))
+
+            if type(v) ~= 'table' then -- Leaf -- just set as child -- keep this code path fast
+                grandchildren[k] = v
+            else -- Table -- adopt it
+                adopt(node, k, v)
+            end
+        end
+
         -- Initialize other fields
-        rawset(node, 'dirty', {})
-        rawset(node, '__allDirty', false)
+        node.__dirty = {}
+        node.__allDirty = false
+
+        -- Finally actually set the metatable
+        setmetatable(node, meta)
     end
 
     -- Set name and join parent link
@@ -55,16 +76,6 @@ local function adopt(parent, name, t)
     end
 
     return node
-end
-
-function newIndex(node, k, v)
-    print(node:__path(), '<-', k, '<-', tostring(v))
-
-    if type(v) ~= 'table' then -- Leaf -- just set as child -- keep this code path fast
-        node.__children[k] = v
-    else -- Table -- adopt it
-        adopt(node, k, v)
-    end
 end
 
 
