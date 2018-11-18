@@ -1,5 +1,8 @@
 local assert = assert
 local setmetatable, getmetatable = setmetatable, getmetatable
+local rawset, rawget, pairs = rawset, rawget, pairs
+local type = type
+local tostring = tostring
 
 
 local Methods = {}
@@ -9,40 +12,49 @@ Methods.__isNode = true
 
 local newIndex
 
-local function adopt(parent, name, child)
-    local newChild
+local function adopt(parent, name, t)
+    local node
 
     -- Make it a node
-    if child.__isNode then -- Was already a node -- make sure it's orphaned and reuse
-        assert(child.__parent, 'tried to adopt a root node')
-        assert(child.__parent.__children[child.__name] ~= child, 'tried to adopt an adopted node')
-        newChild = child
+    if t.__isNode then -- Was already a node -- make sure it's orphaned and reuse
+        assert(t.__parent, 'tried to adopt a root node')
+        assert(t.__parent.__children[t.__name] ~= t, 'tried to adopt an adopted node')
+        node = t
     else -- New node
-        newChild = {}
+        node = {}
 
         -- Create the `.__children` table as our `__index`, with a final lookup in `Methods`
         local grandchildren = setmetatable({}, { __index = Methods })
-        newChild.__children = grandchildren
-        setmetatable(newChild, { __index = grandchildren, __newindex = newIndex })
+        node.__children = grandchildren
+        setmetatable(node, {
+            __index = grandchildren,
+            __newindex = newIndex,
+            __len = function() return #grandchildren end,
+            __pairs = function() return pairs(grandchildren) end
+        })
 
         -- Copy everything, recursively adopting child tables
-        for k, v in pairs(child) do
+        for k, v in pairs(t) do
             if type(v) == 'table' then
-                adopt(newChild, k, v)
+                adopt(node, k, v)
             else
                 grandchildren[k] = v
             end
         end
+
+        -- Initialize other fields
+        rawset(node, 'dirty', {})
+        rawset(node, '__allDirty', false)
     end
 
     -- Set name and join parent link
-    rawset(newChild, '__name', name)
+    rawset(node, '__name', name)
     if parent then
-        rawset(newChild, '__parent', parent)
-        parent.__children[name] = newChild
+        rawset(node, '__parent', parent)
+        parent.__children[name] = node
     end
 
-    return newChild
+    return node
 end
 
 function newIndex(node, k, v)
@@ -58,6 +70,27 @@ end
 
 function Methods:__path()
     return (self.__parent and (self.__parent:__path() .. ':') or '') .. tostring(self.__name)
+end
+
+
+function Methods:__sync(k)
+    -- Set `.__dirty` in self
+    if k == nil then
+        self.__allDirty = true
+    else
+        self.__dirty[k] = true
+    end
+
+    -- Set `.__dirty`s on path to here
+    local node = self
+    while node.__parent do
+        node.__parent.__dirty[node.__name] = true
+        node = node.__parent
+    end
+end
+
+function Methods:__flush()
+    local ret = {}
 end
 
 
