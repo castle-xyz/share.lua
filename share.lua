@@ -80,6 +80,7 @@ local function adopt(parent, name, t)
 
         -- Initialize dirtiness
         proxy.dirty = {}
+        proxy.dirtyRec = false
     end
 
     -- Set name and join parent link
@@ -94,9 +95,6 @@ local function adopt(parent, name, t)
         end
     end
 
-    -- Newly adopted -- need to sync everything
-    proxy.allDirty = true
-
     return node
 end
 
@@ -110,7 +108,7 @@ end
 function Methods:__sync(k)
     local proxy = proxies[self]
 
-    if proxy.allDirty then
+    if proxy.dirtyRec then
         return
     end
     if proxy.dirty[k] then
@@ -118,7 +116,7 @@ function Methods:__sync(k)
     end
     local skipPath = next(proxy.dirty) -- If we've set any `.dirty`s already we can skip path
     if k == nil then
-        proxy.allDirty = true
+        proxy.dirtyRec = true
     else
         proxy.dirty[k] = true
     end
@@ -138,20 +136,21 @@ function Methods:__sync(k)
     end
 end
 
-function Methods:__flush()
+function Methods:__flush(rec)
     local proxy = proxies[self]
+    local rec = rec or proxy.dirtyRec
     local ret = {}
     local children, dirty = proxy.children, proxy.dirty
-    for k in pairs(proxy.allDirty and children or dirty) do
+    for k in pairs(rec and children or dirty) do
         local child = children[k]
         if proxies[child] then
-            ret[k] = child:__flush()
+            ret[k] = child:__flush(rec)
         else
             ret[k] = child
         end
         dirty[k] = nil
     end
-    proxy.allDirty = false
+    proxy.dirtyRec = false
     return ret
 end
 

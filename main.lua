@@ -32,15 +32,55 @@ local share = require 'share'
 --    print(share.kek.arr[i])
 --end
 
-share:__autoSync(true)
+
+
+--share:__autoSync(true)
+--
+--share.foo = {
+--    bar = 3,
+--    baz = 42,
+--}
+--print(serpent.block(share:__flush()))
+--share.foo.bar = 3
+--share.foo.lmao = 42
+--share.foo.baz = 93
+--share.foo = share.foo
+--print(serpent.block(share:__flush()))
+
+
+
+--share:__autoSync(true)
+--
+--share.entities = {}
+--local entities = share.entities
+--
+--for i = 1, 20000 do
+--    entities[i] = { x = math.random(), y = math.random() }
+--end
+--
+--function love.update(dt)
+--    for i = 1, 10 do
+--        local ent = entities[math.random(#entities)]
+--        ent.x = ent.x + 20 * dt
+--    end
+----    print(serpent.block(share:__flush()))
+--end
+--
+--function love.draw()
+--    love.graphics.print('fps: ' .. love.timer.getFPS(), 20, 20)
+--end
+
+
 
 share.foo = {
-    bar = 3,
-    baz = 42,
+    bar = { a = 1, b = 2, c = { 1, 2, 3 } },
+    baz = { a = 1, b = 2, c = { 1, 2, 3 } },
+    kek = 'hai',
 }
+share.foo:__sync()
 print(serpent.block(share:__flush()))
-share.foo.bar = 3
-share.foo.lmao = 42
-share.foo.baz = 93
-share.foo = share.foo
+share.foo.bar:__sync()
+print(serpent.block(share:__flush()))
+share.foo.bar.c:__sync()
+share.foo.baz.c:__sync()
 print(serpent.block(share:__flush()))
