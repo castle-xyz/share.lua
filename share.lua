@@ -91,6 +91,7 @@ local function adopt(parent, name, t)
         parentProxy.children[name] = node
 
         if parentProxy.autoSync == 'rec' then
+            proxy.dirtyRec = true
             node:__autoSync(true)
         end
     end
