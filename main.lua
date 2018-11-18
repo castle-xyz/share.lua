@@ -12,4 +12,7 @@ share.foo = {
 share.foo.kek = 7
 share.ayo = 8
 share.foo.baz.lmao = share.foo.baz.lmao + 1
-print(#share.foo.arr)
+
+print(serpent.block(share:__flush()))
+share.foo.baz:__sync()
+print(serpent.block(share:__flush()))

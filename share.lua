@@ -1,3 +1,6 @@
+serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239f25997b101c585c0daf6a15b7e37fad9/src/serpent.lua'
+
+
 local assert = assert
 local setmetatable, getmetatable = setmetatable, getmetatable
 local rawset, rawget, pairs = rawset, rawget, pairs
@@ -62,7 +65,7 @@ local function adopt(parent, name, t)
 
         -- Initialize other fields
         node.__dirty = {}
-        node.__allDirty = false
+        node.__allDirty = true
 
         -- Finally actually set the metatable
         setmetatable(node, meta)
@@ -85,6 +88,11 @@ end
 
 
 function Methods:__sync(k)
+    if self.__allDirty then
+        return
+    end
+    local skipPath = next(self.__dirty) -- If we've set any `.__dirty`s already we can skip path
+
     -- Set `.__dirty` in self
     if k == nil then
         self.__allDirty = true
@@ -93,15 +101,34 @@ function Methods:__sync(k)
     end
 
     -- Set `.__dirty`s on path to here
-    local node = self
-    while node.__parent do
-        node.__parent.__dirty[node.__name] = true
-        node = node.__parent
+    if not skipPath then
+        local node = self
+        while node.__parent do
+            local name, parent = node.__name, node.__parent
+            local parentDirty = parent.__dirty
+            if parentDirty[name] then
+                break
+            end
+            parentDirty[name] = true
+            node = parent
+        end
     end
 end
 
 function Methods:__flush()
     local ret = {}
+    local children, dirty = self.__children, self.__dirty
+    for k in pairs(self.__allDirty and children or dirty) do
+        local child = children[k]
+        if type(child) == 'table' then
+            ret[k] = child:__flush()
+        else
+            ret[k] = child
+        end
+        dirty[k] = nil
+    end
+    self.__allDirty = false
+    return ret
 end
 
 
