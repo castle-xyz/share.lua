@@ -4,7 +4,7 @@ serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239
 local assert = assert
 local newproxy = newproxy
 local setmetatable, getmetatable = setmetatable, getmetatable
-local rawset, rawget, pairs = rawset, rawget, pairs
+local rawset, rawget = rawset, rawget
 local type = type
 local tostring = tostring
 
@@ -14,9 +14,18 @@ local Methods = {}
 Methods.__isNode = true
 
 
-local newIndex
-
 local proxies = setmetatable({}, { mode = 'k' })
+
+
+-- For `pairs(node)`
+local oldPairs = pairs
+function pairs(t)
+    local proxy = proxies[t]
+    if not proxy then return oldPairs(t) end
+    return oldPairs(proxy.children)
+end
+local pairs = oldPairs
+
 
 local function adopt(parent, name, t)
     local node, proxy
@@ -50,11 +59,6 @@ local function adopt(parent, name, t)
         -- Forward `#node`
         function meta.__len()
             return #grandchildren
-        end
-
-        -- Forward `pairs(node)` -- TODO(nikki): This needs -DLUAJIT_ENABLE_LUA52COMPAT
-        function meta.__pairs()
-            return pairs(grandchildren)
         end
 
         -- Listen for `node[k] = v`
