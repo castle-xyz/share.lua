@@ -65,7 +65,6 @@ local function adopt(parent, name, t)
 
         -- Initialize other fields
         node.__dirty = {}
-        node.__allDirty = true
 
         -- Finally actually set the metatable
         setmetatable(node, meta)
@@ -77,6 +76,9 @@ local function adopt(parent, name, t)
         rawset(node, '__parent', parent)
         parent.__children[name] = node
     end
+
+    -- Newly adopted -- need to sync everything
+    rawset(node, '__allDirty', true)
 
     return node
 end
