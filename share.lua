@@ -70,16 +70,15 @@ local function adopt(parent, name, t)
 
         -- Listen for `node[k] = v`
         function meta.__newindex(t, k, v)
-            print(node:__path(), '<-', k, '<-', tostring(v))
-
             if type(v) ~= 'table' and not proxies[v] then -- Leaf -- keep this code path fast
                 grandchildren[k] = v
-            else -- Potential node -- adopt
+            elseif grandchildren[k] ~= v then -- Potential node -- adopt if not already adopted
                 adopt(node, k, v)
             end
         end
+        proxy.autoSync = false
 
-        -- Initialize other fields
+        -- Initialize dirtiness
         proxy.dirty = {}
     end
 
@@ -87,7 +86,12 @@ local function adopt(parent, name, t)
     proxy.name = name
     if parent then
         proxy.parent = parent
-        proxies[parent].children[name] = node
+        local parentProxy = proxies[parent]
+        parentProxy.children[name] = node
+
+        if parentProxy.autoSync == 'rec' then
+            node:__autoSync(true)
+        end
     end
 
     -- Newly adopted -- need to sync everything
@@ -109,9 +113,10 @@ function Methods:__sync(k)
     if proxy.allDirty then
         return
     end
+    if proxy.dirty[k] then
+        return
+    end
     local skipPath = next(proxy.dirty) -- If we've set any `.dirty`s already we can skip path
-
-    -- Set `.dirty` in self
     if k == nil then
         proxy.allDirty = true
     else
@@ -122,13 +127,13 @@ function Methods:__sync(k)
     if not skipPath then
         local curr = proxy
         while curr.parent do
-            local name, parent = curr.name, proxies[curr.parent]
-            local parentDirty = parent.dirty
+            local name, parentProxy = curr.name, proxies[curr.parent]
+            local parentDirty = parentProxy.dirty
             if parentDirty[name] then
                 break
             end
             parentDirty[name] = true
-            curr = parent
+            curr = parentProxy
         end
     end
 end
@@ -148,6 +153,30 @@ function Methods:__flush()
     end
     proxy.allDirty = false
     return ret
+end
+
+function Methods:__autoSync(rec)
+    local proxy = proxies[self]
+    if not proxy.autoSync then
+        local meta = getmetatable(self)
+        local oldNewindex = meta.__newindex
+        local children = proxy.children
+        function meta.__newindex(t, k, v)
+            if children[k] ~= v then
+                oldNewindex(t, k, v)
+                self:__sync(k)
+            end
+        end
+        proxy.autoSync = true
+    end
+    if proxy.autoSync ~= 'rec' and rec then
+        for k, v in pairs(proxy.children) do
+            if proxies[v] then
+                v:__autoSync(true)
+            end
+        end
+        proxy.autoSync = 'rec'
+    end
 end
 
 
