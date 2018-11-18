@@ -14,5 +14,8 @@ share.ayo = 8
 share.foo.baz.lmao = share.foo.baz.lmao + 1
 
 print(serpent.block(share:__flush()))
-share.foo.baz:__sync()
+local foo = share.foo
+share.foo = nil
+share.kek = foo
+share.kek.baz:__sync()
 print(serpent.block(share:__flush()))

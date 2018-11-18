@@ -2,6 +2,7 @@ serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239
 
 
 local assert = assert
+local newproxy = newproxy
 local setmetatable, getmetatable = setmetatable, getmetatable
 local rawset, rawget, pairs = rawset, rawget, pairs
 local type = type
@@ -15,34 +16,38 @@ Methods.__isNode = true
 
 local newIndex
 
+local proxies = setmetatable({}, { mode = 'k' })
+
 local function adopt(parent, name, t)
-    local node
+    local node, proxy
 
     -- Make it a node
-    if t.__isNode then -- Was already a node -- make sure it's orphaned and reuse
-        assert(t.__parent, 'tried to adopt a root node')
-        assert(t.__parent.__children[t.__name] ~= t, 'tried to adopt an adopted node')
-        node = t
+    if proxies[t] then -- Was already a node -- make sure it's orphaned and reuse
+        node, proxy = t, proxies[t]
+        assert(proxy.parent, 'tried to adopt a root node')
+        assert(proxies[proxy.parent].children[proxy.name] ~= t, 'tried to adopt an adopted node')
     else -- New node
         assert(not getmetatable(t), 'tried to adopt a table that has a metatable')
-        node = {}
-        local meta = {}
+        node = newproxy(true)
+        local meta = getmetatable(node)
+        proxy = {}
+        proxies[node] = proxy
 
-        -- Create the `.__children` table as our `__index`, with a final lookup in `Methods`
+        -- Create the `.children` table as our `__index`, with a final lookup in `Methods`
         local grandchildren = setmetatable({}, { __index = Methods })
-        node.__children = grandchildren
+        proxy.children = grandchildren
         meta.__index = grandchildren
 
         -- Copy everything, recursively adopting child tables
         for k, v in pairs(t) do
-            if type(v) == 'table' then
+            if type(v) == 'table' or proxies[v] then
                 adopt(node, k, v)
             else
                 grandchildren[k] = v
             end
         end
 
-        -- Forward `#node` -- TODO(nikki): This needs -DLUAJIT_ENABLE_LUA52COMPAT
+        -- Forward `#node`
         function meta.__len()
             return #grandchildren
         end
@@ -56,80 +61,81 @@ local function adopt(parent, name, t)
         function meta.__newindex(t, k, v)
             print(node:__path(), '<-', k, '<-', tostring(v))
 
-            if type(v) ~= 'table' then -- Leaf -- just set as child -- keep this code path fast
+            if type(v) ~= 'table' and not proxies[v] then -- Leaf -- keep this code path fast
                 grandchildren[k] = v
-            else -- Table -- adopt it
+            else -- Potential node -- adopt
                 adopt(node, k, v)
             end
         end
 
         -- Initialize other fields
-        node.__dirty = {}
-
-        -- Finally actually set the metatable
-        setmetatable(node, meta)
+        proxy.dirty = {}
     end
 
     -- Set name and join parent link
-    rawset(node, '__name', name)
+    proxy.name = name
     if parent then
-        rawset(node, '__parent', parent)
-        parent.__children[name] = node
+        proxy.parent = parent
+        proxies[parent].children[name] = node
     end
 
     -- Newly adopted -- need to sync everything
-    rawset(node, '__allDirty', true)
+    proxy.allDirty = true
 
     return node
 end
 
 
 function Methods:__path()
-    return (self.__parent and (self.__parent:__path() .. ':') or '') .. tostring(self.__name)
+    local proxy = proxies[self]
+    return (proxy.parent and (proxy.parent:__path() .. ':') or '') .. tostring(proxy.name)
 end
 
 
 function Methods:__sync(k)
-    if self.__allDirty then
+    local proxy = proxies[self]
+
+    if proxy.allDirty then
         return
     end
-    local skipPath = next(self.__dirty) -- If we've set any `.__dirty`s already we can skip path
+    local skipPath = next(proxy.dirty) -- If we've set any `.dirty`s already we can skip path
 
-    -- Set `.__dirty` in self
+    -- Set `.dirty` in self
     if k == nil then
-        self.__allDirty = true
+        proxy.allDirty = true
     else
-        self.__dirty[k] = true
+        proxy.dirty[k] = true
     end
 
-    -- Set `.__dirty`s on path to here
+    -- Set `.dirty`s on path to here
     if not skipPath then
-        local node = self
-        while node.__parent do
-            local name, parent = node.__name, node.__parent
-            local parentDirty = parent.__dirty
+        local curr = proxy
+        while curr.parent do
+            local name, parent = curr.name, proxies[curr.parent]
+            local parentDirty = parent.dirty
             if parentDirty[name] then
                 break
             end
             parentDirty[name] = true
-            node = parent
+            curr = parent
         end
     end
 end
 
 function Methods:__flush()
+    local proxy = proxies[self]
     local ret = {}
-    local children, dirty = self.__children, self.__dirty
-    for k in pairs(self.__allDirty and children or dirty) do
+    local children, dirty = proxy.children, proxy.dirty
+    for k in pairs(proxy.allDirty and children or dirty) do
         local child = children[k]
-        if type(child) == 'table' then
+        if proxies[child] then
             ret[k] = child:__flush()
         else
             ret[k] = child
         end
         dirty[k] = nil
     end
-    self.__allDirty = false
+    proxy.allDirty = false
     return ret
 end
 
