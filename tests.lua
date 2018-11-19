@@ -175,6 +175,108 @@ local function testAutoSync()
 end
 
 
+-- Auto-sync with relevance
+local function testAutoSyncRelevance()
+    local root = share.new()
+    root:__autoSync(true)
+
+    local isRelevant = true
+
+    -- Just use client ids as keys for ease in testing
+
+    -- Init
+    root.t = {
+        rel = {
+            a = { 'a' },
+            b = { 'b' },
+            c = { 'c' },
+        },
+        norm = { 1, 2, 3 },
+    }
+    root.t.rel:__relevance(function (node, client)
+        return isRelevant and { [client] = true } or {}
+    end)
+
+    -- a and b enter
+    assert(equal(root:__diff('a'), {
+        t = {
+            rel = { __relevance = true, a = { __exact = true, 'a' } },
+            norm = { __exact = true, 1, 2, 3 },
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            rel = { __relevance = true, b = { __exact = true, 'b' } },
+            norm = { __exact = true, 1, 2, 3 },
+        }
+    }))
+    root:__flush()
+
+    -- Update
+    root.t.rel.a[2] = 2
+    root.t.rel.b[2] = 2
+    assert(equal(root:__diff('a'), {
+        t = {
+            rel = { __relevance = true, a = { [2] = 2 } },
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            rel = { __relevance = true, b = { [2] = 2 } },
+        }
+    }))
+    root:__flush()
+
+    -- Make irrelevant
+    isRelevant = false
+    root.t:__sync('rel')
+    assert(equal(root:__diff('a'), {
+        t = {
+            rel = { __relevance = true },
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            rel = { __relevance = true },
+        }
+    }))
+    root:__flush()
+
+    -- Make relevant again
+    isRelevant = true
+    root.t:__sync('rel')
+    assert(equal(root:__diff('a'), {
+        t = {
+            rel = { __relevance = true, a = { __exact = true, 'a', 2 } },
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            rel = { __relevance = true, b = { __exact = true, 'b', 2 } },
+        }
+    }))
+    root:__flush()
+
+    -- Update with a non-relevance update too
+    root.t.rel.a[3] = 3
+    root.t.rel.b[3] = 3
+    root.t.norm[4] = 4
+    assert(equal(root:__diff('a'), {
+        t = {
+            rel = { __relevance = true, a = { [3] = 3 } },
+            norm = { [4] = 4 },
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            rel = { __relevance = true, b = { [3] = 3 } },
+            norm = { [4] = 4 },
+        }
+    }))
+    root:__flush()
+    assert(equal(root:__diff('a'), {}))
+end
+
 -- Apply with auto-sync
 local function testAutoApply()
     local root = share.new()
@@ -231,4 +333,8 @@ end
 testBasic()
 testSync()
 testAutoSync()
+testAutoSyncRelevance()
 testAutoApply()
+
+
+print('no errors? then everything passed...')

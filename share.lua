@@ -26,6 +26,7 @@ Methods.__isNode = true
 --    `.nilled`: `child.name` -> `true` for keys that got `nil`'d
 --    `.dirtyRec`: whether all keys are dirty recursively
 --    `.autoSync`: `true` for auto-sync just here, `'rec'` for recursive
+--    `.relevance`: the relevance function if given, `true` if some descendant has one, else `nil`
 local proxies = setmetatable({}, { mode = 'k' })
 
 
@@ -79,6 +80,7 @@ local function adopt(parent, name, t)
         proxy.nilled = {}
         proxy.dirtyRec = false
         proxy.autoSync = false
+        proxy.relevance = nil
 
         -- Listen for `node[k] = v` -- keep this code fast
         local nilled = proxy.nilled
@@ -146,21 +148,41 @@ function Methods:__sync(k)
 end
 
 -- Get the diff of this node since the last flush
-function Methods:__diff(rec, alreadyExact)
-    local ret = {}
+function Methods:__diff(client, rec, alreadyExact)
     local proxy = proxies[self]
-    local rec = rec or proxy.dirtyRec
-    local children, dirty, nilled = proxy.children, proxy.dirty, proxy.nilled
+    local relevance = proxy.relevance
 
-    if not alreadyExact and rec then -- Mark subtree as as exact if not already in one
-        ret.__exact = true
-        alreadyExact = true
+    local rec = rec or proxy.dirtyRec
+    local children = proxy.children
+
+    local ret = {}
+
+    local relevancy
+    if relevance and relevance ~= true then -- Relevance function
+        assert(not alreadyExact, "found a `:__relevance` node in an `alreadyExact` branch...")
+        ret.__relevance = true
+        local lastRelevancy = proxy.lastRelevancies[client]
+        relevancy = relevance(self, client)
+        proxy.lastRelevancies[client] = relevancy
+        for k in pairs(relevancy) do
+            ret[k] = children[k]:__diff(client, not lastRelevancy or not lastRelevancy[k], false)
+        end
+        return ret
+    end
+
+    local dirty, nilled = proxy.dirty, proxy.nilled
+
+    if not relevance then
+        if not alreadyExact and rec then
+            ret.__exact = true
+            alreadyExact = true
+        end
     end
 
     for k in pairs(rec and children or dirty) do
         local v = children[k]
         if proxies[v] then -- Is a child node?
-            ret[k] = v:__diff(rec, alreadyExact)
+            ret[k] = v:__diff(client, rec, alreadyExact)
         elseif nilled[k] then -- Was `nil`'d?
             ret[k] = v == nil and NILD or v -- Make sure it wasn't un-`nil`'d
             nilled[k] = nil
@@ -173,8 +195,8 @@ function Methods:__diff(rec, alreadyExact)
 end
 
 -- Unmark everything recursively. If `getDiff`, returns what the diff was before flushing.
-function Methods:__flush(getDiff)
-    local diff = getDiff and self:__diff() or nil
+function Methods:__flush(getDiff, client)
+    local diff = getDiff and self:__diff(client) or nil
     local proxy = proxies[self]
     local children, dirty = proxy.children, proxy.dirty
     for k in pairs(dirty) do
@@ -221,11 +243,32 @@ function Methods:__autoSync(rec)
     end
 end
 
+function Methods:__relevance(relevance)
+    local proxy = proxies[self]
+    local prevRelevance = proxy.relevance
+    if prevRelevance and not (relevance == true and prevRelevance == true) then
+        error('nested nodes with `:__relevance`')
+    end
+    proxy.relevance = relevance
+    if relevance and relevance ~= true then
+        proxy.lastRelevancies = setmetatable({}, { __mode = 'k' })
+    end
+    local parent = proxy.parent
+    if parent then
+        parent:__relevance(true)
+    end
+end
+
 
 local function apply(t, diff)
     if diff.__exact then
         diff.__exact = nil
         return diff
+    end
+
+    local relevance = diff.__relevance
+    if relevance then
+        diff.__relevance = nil
     end
 
     t = type(t) == 'table' and t or {}
@@ -236,6 +279,14 @@ local function apply(t, diff)
             t[k] = nil
         else
             t[k] = v
+        end
+    end
+
+    if relevance then -- If has relevance, `nil`-out entries that are irrelevant
+        for k in pairs(t) do
+            if not diff[k] then
+                t[k] = nil
+            end
         end
     end
     return t
