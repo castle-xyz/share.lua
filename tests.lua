@@ -1,25 +1,7 @@
 local share = require 'share'
 
 
--- Make LuaUnit think nodes are tables, also give it the right `table.unpack` function
-local oldType = type
-function type(t)
-    if oldType(t) == 'userdata' and t.__isNode then return 'table' end
-    return oldType(t)
-end
-table.unpack = unpack
-local lu = require 'https://raw.githubusercontent.com/bluebird75/luaunit/7a441a5b97b5e50c4121907b2a92ae45d31d630a/luaunit.lua'
-
-
--- A little utility to make and track tests
-local allTestNames = {}
-local function defTest(name, func)
-    assert(name:match('^test'), "test names must start wth 'test'")
-    _G[name] = func
-    table.insert(allTestNames, name)
-end
-
--- Generate a deep table, branching `nKeys`-ways at each level, with max depth `depth`
+-- Randomly generate a deep table, branching `nKeys`-ways at each level, with max depth `depth`
 local function genTable(nKeys, depth)
     if depth <= 0 then return math.random(10000) end
     local t = {}
@@ -29,10 +11,10 @@ local function genTable(nKeys, depth)
     return t
 end
 
--- Edit a deep table
+-- Randomly edit a deep table
 local function editTable(t)
     for k, v in pairs(t) do
-        if type(v) == 'table' then
+        if type(v) == 'table' then -- Edit inside first so we can test overwriting
             editTable(v)
         end
 
@@ -47,9 +29,30 @@ local function editTable(t)
     end
 end
 
+-- Compare tables for deep equality, returning whether equal and a helpful message if not
+local function deep(x) return type(x) == 'table' or type(x) == 'userdata' and x.__isNode end
+local function equal(a, b)
+    if a == b then return true end
+    if not (deep(a) and deep(b)) then
+        return false, ' ' .. tostring(a) .. ' ~= ' .. tostring(b)
+    end
+    for k, v in pairs(a) do
+        local result, msg = equal(v, b[k])
+        if not result then
+            return false, tostring(k) .. ':' .. msg
+        end
+    end
+    for k, v in pairs(b) do
+        if a[k] == nil then -- All keys in `a` were already checked above
+            return false, tostring(k) .. ': nil ~= ' .. tostring(v)
+        end
+    end
+    return true
+end
+
 
 -- Assignment
-defTest('testAssign', function()
+local function testBasic()
     local root = share.new()
 
     -- Initial deep table
@@ -62,23 +65,23 @@ defTest('testAssign', function()
         }
     }
     root.t = t
-    lu.assertEquals(root.t, t)
+    assert(equal(root.t, t))
 
     -- Basic overwrite
     root.t.newKey = 4
-    lu.assertEquals(root.t.newKey, 4)
+    assert(equal(root.t.newKey, 4))
 
     -- Deep random table
     for i = 1, 10 do
         local u = genTable(5, 2)
         root.t.u = u
-        lu.assertEquals(root.t.u, u)
+        assert(equal(root.t.u, u))
     end
-end)
+end
 
 
 -- Manual sync
-defTest('testSync', function()
+local function testSync()
     local root = share.new()
 
     -- Initial table
@@ -90,27 +93,27 @@ defTest('testSync', function()
 
     -- Sync leaf
     root.a.d:__sync('hello')
-    lu.assertEquals(root:__flush(), { a = { d = { hello = 2 }}})
+    assert(equal(root:__flush(), { a = { d = { hello = 2 }}}))
 
     -- Sync sub-table
     root.a.c:__sync()
-    lu.assertEquals(root:__flush(), { a = { c = { __exact = true, 4, 5, 6 } } })
+    assert(equal(root:__flush(), { a = { c = { __exact = true, 4, 5, 6 } } }))
 
     -- Sync recursive
     root.a:__sync()
-    lu.assertEquals(root:__flush(), {
+    assert(equal(root:__flush(), {
         a = {
             __exact = true,
             b = { 1, 2, 3 },
             c = { 4, 5, 6 },
             d = { hello = 2, world = 5 },
         },
-    })
-end)
+    }))
+end
 
 
 -- Auto-sync
-defTest('testAutoSync', function()
+local function testAutoSync()
     local root = share.new()
     root:__autoSync(true)
 
@@ -121,7 +124,7 @@ defTest('testAutoSync', function()
         d = { hello = 2, world = 5 },
         e = { hey = 2, there = { deeper = 42 } },
     }
-    lu.assertEquals(root:__flush(), {
+    assert(equal(root:__flush(), {
         a = {
             __exact = true,
             b = { 1, 2, 3 },
@@ -129,51 +132,25 @@ defTest('testAutoSync', function()
             d = { hello = 2, world = 5 },
             e = { hey = 2, there = { deeper = 42 } },
         },
-    })
+    }))
 
     -- Sync leaf
     root.a.d.hello = 3
-    lu.assertEquals(root:__flush(), { a = { d = { hello = 3 }}})
+    assert(equal(root:__flush(), { a = { d = { hello = 3 }}}))
 
     -- Sync sub-table
     root.a.c = { 7, 8, 9 }
-    lu.assertEquals(root:__flush(), { a = { c = { __exact = true, 7, 8, 9 } } })
+    assert(equal(root:__flush(), { a = { c = { __exact = true, 7, 8, 9 } } }))
 
     -- Sync separate paths
     root.a.d.world = 6
     root.a.e.there = 'nope'
-    lu.assertEquals(root:__flush(), { a = { d = { world = 6 }, e = { there = 'nope' } } })
-end)
-
-
-local function tableEquals(t1, t2)
-    if type(t1) ~= 'table' or type(t2) ~= 'table' then
-        print('a')
-        return false
-    end
-    for k, v in pairs(t1) do
-        if type(v) == 'table' then
-            if not tableEquals(v, t2[k]) then
-                print('b')
-                return false
-            end
-        elseif v ~= t2[k] then
-            print(type(v))
-            print(t1:__path(), k)
-            return false
-        end
-    end
-    for k in pairs(t2) do
-        if t1[k] == nil then
-            print('d')
-            return false
-        end
-    end
-    return true
+    assert(equal(root:__flush(), { a = { d = { world = 6 }, e = { there = 'nope' } } }))
 end
 
+
 -- Apply with auto-sync
-defTest('testAutoApply', function()
+local function testAutoApply()
     local root = share.new()
     root:__autoSync(true)
     local target = {}
@@ -186,43 +163,46 @@ defTest('testAutoApply', function()
         e = { hey = 2, there = { deeper = 42 } },
     }
     share.apply(target, root:__flush())
-    lu.assertEquals(target, root)
+    assert(equal(target, root))
 
     -- Leaf
     root.a.d.hello = 3
     share.apply(target, root:__flush())
-    lu.assertEquals(target, root)
+    assert(equal(target, root))
 
     -- Sub-table
     root.a.c = { 7, 8, 9 }
     share.apply(target, root:__flush())
-    lu.assertEquals(target, root)
+    assert(equal(target, root))
 
     -- Separate paths
     root.a.d.world = 6
     root.a.e.there = 'nope'
     share.apply(target, root:__flush())
-    lu.assertEquals(target, root)
+    assert(equal(target, root))
 
     -- `nil`
     root.a.d.world = 6
     root.a.d = nil
     root.a.e.there = nil
     share.apply(target, root:__flush())
-    lu.assertEquals(target, root)
+    assert(equal(target, root))
 
     -- Generative
     for i = 1, 5 do
         root.u = genTable(5, 4)
         share.apply(target, root:__flush())
-        lu.assertTrue(tableEquals(root, target))
+        assert(equal(target, root))
         for j = 1, 5 do
             editTable(root.u)
             share.apply(target, root:__flush())
-            lu.assertTrue(tableEquals(root, target))
+            assert(equal(target, root))
         end
     end
-end)
+end
 
 
-lu.LuaUnit:runSuiteByNames(allTestNames)
+testBasic()
+testSync()
+testAutoSync()
+testAutoApply()
