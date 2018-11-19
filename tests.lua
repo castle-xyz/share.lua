@@ -29,7 +29,7 @@ local function editTable(t)
     end
 end
 
--- Compare tables for deep equality, returning whether equal and also a helpful message if not
+-- Compare tables for deep equality, returning whether equal and along with a helpful message if not
 local function deep(x) return type(x) == 'table' or type(x) == 'userdata' and x.__isNode end
 local function equal(a, b)
     if a == b then return true end
