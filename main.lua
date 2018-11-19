@@ -1,5 +1,8 @@
 local share = require 'share'
 
+local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239f25997b101c585c0daf6a15b7e37fad9/src/serpent.lua'
+
+
 --share.foo = {
 --    bar = 3,
 --    baz = {
@@ -52,7 +55,7 @@ share.baz = 76
 
 print(serpent.block(share:__flush()))
 
-share.blah = 13 -- overwriting table with number
+share.foo.blah.hello = 13
 
 print(serpent.block(share:__flush()))
 

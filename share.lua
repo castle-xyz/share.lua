@@ -1,6 +1,3 @@
-serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239f25997b101c585c0daf6a15b7e37fad9/src/serpent.lua'
-
-
 local assert = assert
 local newproxy = newproxy
 local setmetatable, getmetatable = setmetatable, getmetatable
