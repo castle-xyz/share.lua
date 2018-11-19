@@ -16,6 +16,8 @@ Methods.__isNode = true
 
 
 -- `proxy` per `node` that stores metadata. This is needed because `node`s are 'userdata'-typed.
+-- Being 'userdata'-typed allows forwarding the `#node` operator and prevents mistaking it for a
+-- regular table.
 --
 --    `.name`: name
 --    `.children`: `child.name` -> `child` (leaf or node) for all children
@@ -123,18 +125,19 @@ end
 -- Mark key `k` for sync. If `k` is `nil`, marks everything recursively.
 function Methods:__sync(k)
     local proxy = proxies[self]
+    local dirty = proxy.dirty
 
     -- Skip all this work if already dirty
-    if proxy.dirtyRec or proxy.dirty[k] then
+    if proxy.dirtyRec or dirty[k] then
         return
     end
 
-    -- Set and recurse on parent -- skipping recursion if we've done it before
-    local skipParent = next(proxy.dirty)
+    -- Set and recurse on parent -- skipping parent if `dirty` is non-empty (we'd've done it before)
+    local skipParent = next(dirty)
     if k == nil then
         proxy.dirtyRec = true
     else
-        proxy.dirty[k] = true
+        dirty[k] = true
     end
     local parent = proxy.parent
     if not skipParent and parent then
