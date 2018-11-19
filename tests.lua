@@ -1,6 +1,9 @@
 local share = require 'share'
 
 
+local NILD = 'NILD' -- Sentinel to encode `nil`-ing in diffs -- TODO(nikki): Make this smaller
+
+
 -- Randomly generate a deep table, branching `nKeys`-ways at each level, with max depth `depth`
 local function genTable(nKeys, depth)
     if depth <= 0 then return math.random(10000) end
@@ -200,13 +203,13 @@ local function testAutoSyncRelevance()
     -- a and b enter
     assert(equal(root:__diff('a'), {
         t = {
-            rel = { __relevance = true, a = { __exact = true, 'a' } },
+            rel = { a = { __exact = true, 'a' } },
             norm = { __exact = true, 1, 2, 3 },
         }
     }))
     assert(equal(root:__diff('b'), {
         t = {
-            rel = { __relevance = true, b = { __exact = true, 'b' } },
+            rel = { b = { __exact = true, 'b' } },
             norm = { __exact = true, 1, 2, 3 },
         }
     }))
@@ -217,12 +220,12 @@ local function testAutoSyncRelevance()
     root.t.rel.b[2] = 2
     assert(equal(root:__diff('a'), {
         t = {
-            rel = { __relevance = true, a = { [2] = 2 } },
+            rel = { a = { [2] = 2 } },
         }
     }))
     assert(equal(root:__diff('b'), {
         t = {
-            rel = { __relevance = true, b = { [2] = 2 } },
+            rel = { b = { [2] = 2 } },
         }
     }))
     root:__flush()
@@ -232,12 +235,12 @@ local function testAutoSyncRelevance()
     root.t:__sync('rel')
     assert(equal(root:__diff('a'), {
         t = {
-            rel = { __relevance = true },
+            rel = { a = NILD },
         }
     }))
     assert(equal(root:__diff('b'), {
         t = {
-            rel = { __relevance = true },
+            rel = { b = NILD },
         }
     }))
     root:__flush()
@@ -247,12 +250,12 @@ local function testAutoSyncRelevance()
     root.t:__sync('rel')
     assert(equal(root:__diff('a'), {
         t = {
-            rel = { __relevance = true, a = { __exact = true, 'a', 2 } },
+            rel = { a = { __exact = true, 'a', 2 } },
         }
     }))
     assert(equal(root:__diff('b'), {
         t = {
-            rel = { __relevance = true, b = { __exact = true, 'b', 2 } },
+            rel = { b = { __exact = true, 'b', 2 } },
         }
     }))
     root:__flush()
@@ -263,18 +266,34 @@ local function testAutoSyncRelevance()
     root.t.norm[4] = 4
     assert(equal(root:__diff('a'), {
         t = {
-            rel = { __relevance = true, a = { [3] = 3 } },
+            rel = { a = { [3] = 3 } },
             norm = { [4] = 4 },
         }
     }))
     assert(equal(root:__diff('b'), {
         t = {
-            rel = { __relevance = true, b = { [3] = 3 } },
+            rel = { b = { [3] = 3 } },
             norm = { [4] = 4 },
         }
     }))
     root:__flush()
-    assert(equal(root:__diff('a'), {}))
+
+    -- No changes
+    assert(equal(root:__diff('a'), nil))
+    assert(equal(root:__diff('b'), nil))
+
+    -- New client
+    root.t.rel.d = { 'd' }
+    assert(equal(root:__diff('a'), nil))
+    assert(equal(root:__diff('b'), nil))
+    assert(equal(root:__diff('d', true), {
+        t = {
+            rel = { d = { __exact = true, 'd' } },
+            norm = { __exact = true, 1, 2, 3, 4 },
+        }
+    }))
+    root:__flush()
+    assert(equal(root:__diff('a'), nil))
 end
 
 -- Apply with auto-sync

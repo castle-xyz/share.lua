@@ -147,50 +147,61 @@ function Methods:__sync(k)
     end
 end
 
--- Get the diff of this node since the last flush
+-- Get the diff of this node since the last flush.
+--   `client`: the client to get the diff w.r.t
+--   `rec`: whether to get an 'exact' diff of everything
 function Methods:__diff(client, rec, alreadyExact)
     local proxy = proxies[self]
     local relevance = proxy.relevance
 
     local rec = rec or proxy.dirtyRec
-    local children = proxy.children
+    local children, dirty, nilled = proxy.children, proxy.dirty, proxy.nilled
 
     local ret = {}
 
     local relevancy
     if relevance and relevance ~= true then -- Relevance function
         assert(not alreadyExact, "found a `:__relevance` node in an `alreadyExact` branch...")
-        ret.__relevance = true
         local lastRelevancy = proxy.lastRelevancies[client]
         relevancy = relevance(self, client)
         proxy.lastRelevancies[client] = relevancy
         for k in pairs(relevancy) do
-            ret[k] = children[k]:__diff(client, not lastRelevancy or not lastRelevancy[k], false)
+            if not lastRelevancy or not lastRelevancy[k] then
+                ret[k] = children[k]:__diff(client, true, false)
+            elseif dirty[k] then
+                ret[k] = children[k]:__diff(client, false, false)
+            end
         end
-        return ret
-    end
+        if lastRelevancy then
+            for k in pairs(lastRelevancy) do
+                if not relevancy[k] then
+                    ret[k] = NILD
+                end
+            end
+        end
+    else
+        if not relevance then
+            if not alreadyExact and rec then
+                ret.__exact = true
+                alreadyExact = true
+            end
+        end
 
-    local dirty, nilled = proxy.dirty, proxy.nilled
-
-    if not relevance then
-        if not alreadyExact and rec then
-            ret.__exact = true
-            alreadyExact = true
+        for k in pairs(rec and children or dirty) do
+            local v = children[k]
+            if proxies[v] then -- Is a child node?
+                ret[k] = v:__diff(client, rec, alreadyExact)
+            elseif nilled[k] then -- Was `nil`'d?
+                ret[k] = v == nil and NILD or v -- Make sure it wasn't un-`nil`'d
+                nilled[k] = nil
+            else
+                ret[k] = v
+            end
         end
     end
-
-    for k in pairs(rec and children or dirty) do
-        local v = children[k]
-        if proxies[v] then -- Is a child node?
-            ret[k] = v:__diff(client, rec, alreadyExact)
-        elseif nilled[k] then -- Was `nil`'d?
-            ret[k] = v == nil and NILD or v -- Make sure it wasn't un-`nil`'d
-            nilled[k] = nil
-        else
-            ret[k] = v
-        end
+    if not next(ret) then
+        ret = nil
     end
-
     return ret
 end
 
@@ -261,16 +272,11 @@ end
 
 
 local function apply(t, diff)
+    if diff == nil then return t end
     if diff.__exact then
         diff.__exact = nil
         return diff
     end
-
-    local relevance = diff.__relevance
-    if relevance then
-        diff.__relevance = nil
-    end
-
     t = type(t) == 'table' and t or {}
     for k, v in pairs(diff) do
         if type(v) == 'table' then
@@ -279,14 +285,6 @@ local function apply(t, diff)
             t[k] = nil
         else
             t[k] = v
-        end
-    end
-
-    if relevance then -- If has relevance, `nil`-out entries that are irrelevant
-        for k in pairs(t) do
-            if not diff[k] then
-                t[k] = nil
-            end
         end
     end
     return t
