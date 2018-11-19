@@ -34,18 +34,27 @@ local share = require 'share'
 
 
 
---share:__autoSync(true)
---
---share.foo = {
---    bar = 3,
---    baz = 42,
---}
---print(serpent.block(share:__flush()))
---share.foo.bar = 3
---share.foo.lmao = 42
---share.foo.baz = 93
---share.foo = share.foo
---print(serpent.block(share:__flush()))
+share:__autoSync(true)
+
+share.foo = {
+    bar = 3,
+    baz = 42,
+    blah = {
+        hello = 1,
+        world = 'ok',
+    }
+}
+
+print(serpent.block(share:__flush()))
+print(serpent.block(share:__flush()))
+
+share.baz = 76
+
+print(serpent.block(share:__flush()))
+
+share.blah = 13 -- overwriting table with number
+
+print(serpent.block(share:__flush()))
 
 
 
@@ -72,15 +81,15 @@ local share = require 'share'
 
 
 
-share.foo = {
-    bar = { a = 1, b = 2, c = { 1, 2, 3 } },
-    baz = { a = 1, b = 2, c = { 1, 2, 3 } },
-    kek = 'hai',
-}
-share.foo:__sync()
-print(serpent.block(share:__flush()))
-share.foo.bar:__sync()
-print(serpent.block(share:__flush()))
-share.foo.bar.c:__sync()
-share.foo.baz.c:__sync()
-print(serpent.block(share:__flush()))
+--share.foo = {
+--    bar = { a = 1, b = 2, c = { 1, 2, 3 } },
+--    baz = { a = 1, b = 2, c = { 1, 2, 3 } },
+--    kek = 'hai',
+--}
+--share.foo:__sync()
+--print(serpent.block(share:__flush()))
+--share.foo.bar:__sync()
+--print(serpent.block(share:__flush()))
+--share.foo.bar.c:__sync()
+--share.foo.baz.c:__sync()
+--print(serpent.block(share:__flush()))
