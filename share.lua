@@ -67,15 +67,6 @@ local function adopt(parent, name, t)
         proxy.children = children
         meta.__index = children
 
-        -- Copy everything, recursively adopting child tables
-        for k, v in pairs(t) do
-            if type(v) == 'table' or proxies[v] then
-                adopt(node, k, v)
-            else
-                children[k] = v
-            end
-        end
-
         -- Forward `#node`
         function meta.__len()
             return #children
@@ -89,13 +80,19 @@ local function adopt(parent, name, t)
 
         -- Listen for `node[k] = v` -- keep this code fast
         local nilled = proxy.nilled
-        function meta.__newindex(t, k, v)
+        local function newindex(t, k, v)
             if v == nil then nilled[k] = true end -- Record `nil`'ing
             if type(v) ~= 'table' and not proxies[v] then -- Leaf -- just set
                 children[k] = v
             elseif children[k] ~= v then -- Potential node -- adopt if not already adopted
                 adopt(node, k, v)
             end
+        end
+        meta.__newindex = newindex
+
+        -- Copy initial data
+        for k, v in pairs(t) do
+            newindex(nil, k, v)
         end
     end
 
