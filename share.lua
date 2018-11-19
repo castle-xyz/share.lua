@@ -125,31 +125,21 @@ end
 function Methods:__sync(k)
     local proxy = proxies[self]
 
-    if proxy.dirtyRec then
+    -- Skip all this work if already dirty
+    if proxy.dirtyRec or proxy.dirty[k] then
         return
     end
-    if proxy.dirty[k] then
-        return
-    end
-    local skipPath = next(proxy.dirty) -- If we've set any `.dirty`s already we can skip path
+
+    -- Set and recurse on parent -- skipping recursion if we've done it before
+    local skipParent = next(proxy.dirty)
     if k == nil then
         proxy.dirtyRec = true
     else
         proxy.dirty[k] = true
     end
-
-    -- Set `.dirty`s on path to here
-    if not skipPath then
-        local curr = proxy
-        while curr.parent do
-            local name, parentProxy = curr.name, proxies[curr.parent]
-            local parentDirty = parentProxy.dirty
-            if parentDirty[name] then
-                break
-            end
-            parentDirty[name] = true
-            curr = parentProxy
-        end
+    local parent = proxy.parent
+    if not skipParent and parent then
+        parent:__sync(proxy.name)
     end
 end
 
