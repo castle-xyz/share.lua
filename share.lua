@@ -256,6 +256,9 @@ function Methods:__autoSync(rec)
     end
 end
 
+-- Set the relevance function for a node. The function should take two arguments -- the node itself
+-- and the `client` passed to `:__diff` or `:__flush`; and return the set of keys of the node
+-- relevant to that client (as keys of a table).
 function Methods:__relevance(relevance)
     local proxy = proxies[self]
     local prevRelevance = proxy.relevance
@@ -273,6 +276,7 @@ function Methods:__relevance(relevance)
 end
 
 
+-- Apply a diff from `:__diff` or `:__flush` to a target `t`
 local function apply(t, diff)
     if diff == nil then return t end
     if diff.__exact then
