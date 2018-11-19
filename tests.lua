@@ -102,13 +102,13 @@ local function testSync()
     assert(equal(root:__flush(true), { a = { d = { hello = 2 }}}))
 
     -- Sync sub-table
-    root.a.c:__sync()
+    root.a.c:__sync(nil, true)
     assert(equal(root:__diff(), { a = { c = { __exact = true, 4, 5, 6 } } }))
     assert(equal(root:__diff(), { a = { c = { __exact = true, 4, 5, 6 } } }))
     assert(equal(root:__flush(true), { a = { c = { __exact = true, 4, 5, 6 } } }))
 
     -- Sync recursive
-    root.a:__sync()
+    root.a:__sync(nil, true)
     assert(equal(root:__diff(), {
         a = {
             __exact = true,
@@ -232,7 +232,7 @@ local function testAutoSyncRelevance()
 
     -- Make irrelevant
     isRelevant = false
-    root.t:__sync('rel')
+    root.t.rel:__sync()
     assert(equal(root:__diff('a'), {
         t = {
             rel = { a = NILD },
@@ -247,7 +247,7 @@ local function testAutoSyncRelevance()
 
     -- Make relevant again
     isRelevant = true
-    root.t:__sync('rel')
+    root.t.rel:__sync()
     assert(equal(root:__diff('a'), {
         t = {
             rel = { a = { __exact = true, 'a', 2 } },

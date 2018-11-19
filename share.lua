@@ -124,8 +124,8 @@ function Methods:__path()
 end
 
 
--- Mark key `k` for sync. If `k` is `nil`, marks everything recursively.
-function Methods:__sync(k)
+-- Mark key `k` for sync. If `k` is `nil` and `rec` is `true`, marks everything recursively.
+function Methods:__sync(k, rec)
     local proxy = proxies[self]
     local dirty = proxy.dirty
 
@@ -137,7 +137,9 @@ function Methods:__sync(k)
     -- Set and recurse on parent -- skipping parent if `dirty` is non-empty (we'd've done it before)
     local skipParent = next(dirty)
     if k == nil then
-        proxy.dirtyRec = true
+        if rec then
+            proxy.dirtyRec = true
+        end
     else
         dirty[k] = true
     end
