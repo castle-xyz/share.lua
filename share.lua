@@ -146,16 +146,21 @@ function Methods:__sync(k)
 end
 
 -- Get the diff of this node and unmark as dirty.
-function Methods:__flush(rec)
+function Methods:__flush(rec, alreadyExact)
     local ret = {}
     local proxy = proxies[self]
     local rec = rec or proxy.dirtyRec
     local children, dirty, nilled = proxy.children, proxy.dirty, proxy.nilled
 
+    if not alreadyExact and rec then -- Mark subtree as as exact if not already in one
+        ret.__exact = true
+        alreadyExact = true
+    end
+
     for k in pairs(rec and children or dirty) do
         local v = children[k]
         if proxies[v] then -- Is a child node?
-            ret[k] = v:__flush(rec)
+            ret[k] = v:__flush(rec, alreadyExact)
         elseif nilled[k] then -- Was `nil`'d?
             ret[k] = v == nil and NILD or v -- Make sure it wasn't un-`nil`'d
             nilled[k] = nil
@@ -207,8 +212,30 @@ function Methods:__autoSync(rec)
 end
 
 
+local function apply(t, diff)
+    if diff.__exact then
+        diff.__exact = nil
+        return diff
+    end
+
+    t = type(t) == 'table' and t or {}
+    for k, v in pairs(diff) do
+        if type(v) == 'table' then
+            t[k] = apply(t[k], v)
+        elseif v == NILD then
+            t[k] = nil
+        else
+            t[k] = v
+        end
+    end
+    return t
+end
+
+
 return {
     new = function(name)
         return adopt(nil, name or 'root', {})
     end,
+
+    apply = apply,
 }

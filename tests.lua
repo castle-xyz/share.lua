@@ -21,12 +21,28 @@ end
 
 -- Generate a deep table, branching `nKeys`-ways at each level, with max depth `depth`
 local function genTable(nKeys, depth)
-    if depth <= 0 then return math.random() end
+    if depth <= 0 then return math.random(10000) end
     local t = {}
     for i = 1, nKeys do
         t[math.random() < 0.5 and i or tostring(i)] = genTable(nKeys, depth - math.random(depth - 1))
     end
     return t
+end
+
+-- Edit a deep table
+local function editTable(t)
+    for k, v in pairs(t) do
+        if type(v) == 'table' then
+            editTable(v)
+        end
+
+        local r = math.random(5)
+        if r <= 1 then
+            t[k] = nil
+        elseif r <= 3 then
+            t[k] = math.random(10000)
+        end
+    end
 end
 
 
@@ -51,9 +67,11 @@ defTest('testAssign', function()
     lu.assertEquals(root.t.newKey, 4)
 
     -- Deep random table
-    local u = genTable(5, 2)
-    root.t.u = u
-    lu.assertEquals(root.t.u, u)
+    for i = 1, 10 do
+        local u = genTable(5, 2)
+        root.t.u = u
+        lu.assertEquals(root.t.u, u)
+    end
 end)
 
 
@@ -74,17 +92,22 @@ defTest('testSync', function()
 
     -- Sync sub-table
     root.a.c:__sync()
-    lu.assertEquals(root:__flush(), { a = { c = { 4, 5, 6 } } })
-    root.a.c:__sync()
-    lu.assertEquals(root:__flush(), { a = { c = { 4, 5, 6 } } })
+    lu.assertEquals(root:__flush(), { a = { c = { __exact = true, 4, 5, 6 } } })
 
     -- Sync recursive
     root.a:__sync()
-    lu.assertEquals(root:__flush(), { a = root.a })
+    lu.assertEquals(root:__flush(), {
+        a = {
+            __exact = true,
+            b = { 1, 2, 3 },
+            c = { 4, 5, 6 },
+            d = { hello = 2, world = 5 },
+        },
+    })
 end)
 
 
--- Auto sync
+-- Auto-sync
 defTest('testAutoSync', function()
     local root = share.new()
     root:__autoSync(true)
@@ -96,7 +119,15 @@ defTest('testAutoSync', function()
         d = { hello = 2, world = 5 },
         e = { hey = 2, there = { deeper = 42 } },
     }
-    lu.assertEquals(root:__flush(), root)
+    lu.assertEquals(root:__flush(), {
+        a = {
+            __exact = true,
+            b = { 1, 2, 3 },
+            c = { 4, 5, 6 },
+            d = { hello = 2, world = 5 },
+            e = { hey = 2, there = { deeper = 42 } },
+        },
+    })
 
     -- Sync leaf
     root.a.d.hello = 3
@@ -104,12 +135,65 @@ defTest('testAutoSync', function()
 
     -- Sync sub-table
     root.a.c = { 7, 8, 9 }
-    lu.assertEquals(root:__flush(), { a = { c = { 7, 8, 9 } } })
+    lu.assertEquals(root:__flush(), { a = { c = { __exact = true, 7, 8, 9 } } })
 
     -- Sync separate paths
     root.a.d.world = 6
     root.a.e.there = 'nope'
     lu.assertEquals(root:__flush(), { a = { d = { world = 6 }, e = { there = 'nope' } } })
+end)
+
+
+-- Apply with auto-sync
+defTest('testAutoApply', function()
+    local root = share.new()
+    root:__autoSync(true)
+    local target = {}
+
+    -- Initial table
+    root.a = {
+        b = { 1, 2, 3 },
+        c = { 4, 5, 6 },
+        d = { hello = 2, world = 5 },
+        e = { hey = 2, there = { deeper = 42 } },
+    }
+    share.apply(target, root:__flush())
+    lu.assertEquals(target, root)
+
+    -- Leaf
+    root.a.d.hello = 3
+    share.apply(target, root:__flush())
+    lu.assertEquals(target, root)
+
+    -- Sub-table
+    root.a.c = { 7, 8, 9 }
+    share.apply(target, root:__flush())
+    lu.assertEquals(target, root)
+
+    -- Separate paths
+    root.a.d.world = 6
+    root.a.e.there = 'nope'
+    share.apply(target, root:__flush())
+    lu.assertEquals(target, root)
+
+    -- `nil`
+    root.a.d.world = 6
+    root.a.d = nil
+    root.a.e.there = nil
+    share.apply(target, root:__flush())
+    lu.assertEquals(target, root)
+
+    -- Generative
+    for i = 1, 2 do
+        root.u = genTable(2, 2)
+        share.apply(target, root:__flush())
+        lu.assertEquals(target, root)
+        for j = 1, 1 do
+            editTable(root.u)
+            share.apply(target, root:__flush())
+            lu.assertEquals(target, root)
+        end
+    end
 end)
 
 
