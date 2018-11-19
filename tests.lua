@@ -84,6 +84,8 @@ end
 local function testSync()
     local root = share.new()
 
+    -- We do `:__diff` a couple times to check that it's not lost without `:__flush`
+
     -- Initial table
     root.a = {
         b = { 1, 2, 3 },
@@ -93,15 +95,26 @@ local function testSync()
 
     -- Sync leaf
     root.a.d:__sync('hello')
-    assert(equal(root:__flush(), { a = { d = { hello = 2 }}}))
+    assert(equal(root:__diff(), { a = { d = { hello = 2 }}}))
+    assert(equal(root:__flush(true), { a = { d = { hello = 2 }}}))
 
     -- Sync sub-table
     root.a.c:__sync()
-    assert(equal(root:__flush(), { a = { c = { __exact = true, 4, 5, 6 } } }))
+    assert(equal(root:__diff(), { a = { c = { __exact = true, 4, 5, 6 } } }))
+    assert(equal(root:__diff(), { a = { c = { __exact = true, 4, 5, 6 } } }))
+    assert(equal(root:__flush(true), { a = { c = { __exact = true, 4, 5, 6 } } }))
 
     -- Sync recursive
     root.a:__sync()
-    assert(equal(root:__flush(), {
+    assert(equal(root:__diff(), {
+        a = {
+            __exact = true,
+            b = { 1, 2, 3 },
+            c = { 4, 5, 6 },
+            d = { hello = 2, world = 5 },
+        },
+    }))
+    assert(equal(root:__flush(true), {
         a = {
             __exact = true,
             b = { 1, 2, 3 },
@@ -124,7 +137,16 @@ local function testAutoSync()
         d = { hello = 2, world = 5 },
         e = { hey = 2, there = { deeper = 42 } },
     }
-    assert(equal(root:__flush(), {
+    assert(equal(root:__diff(), {
+        a = {
+            __exact = true,
+            b = { 1, 2, 3 },
+            c = { 4, 5, 6 },
+            d = { hello = 2, world = 5 },
+            e = { hey = 2, there = { deeper = 42 } },
+        },
+    }))
+    assert(equal(root:__flush(true), {
         a = {
             __exact = true,
             b = { 1, 2, 3 },
@@ -136,16 +158,20 @@ local function testAutoSync()
 
     -- Sync leaf
     root.a.d.hello = 3
-    assert(equal(root:__flush(), { a = { d = { hello = 3 }}}))
+    assert(equal(root:__diff(), { a = { d = { hello = 3 }}}))
+    assert(equal(root:__flush(true), { a = { d = { hello = 3 }}}))
 
     -- Sync sub-table
     root.a.c = { 7, 8, 9 }
-    assert(equal(root:__flush(), { a = { c = { __exact = true, 7, 8, 9 } } }))
+    assert(equal(root:__diff(), { a = { c = { __exact = true, 7, 8, 9 } } }))
+    assert(equal(root:__diff(), { a = { c = { __exact = true, 7, 8, 9 } } }))
+    assert(equal(root:__flush(true), { a = { c = { __exact = true, 7, 8, 9 } } }))
 
     -- Sync separate paths
     root.a.d.world = 6
     root.a.e.there = 'nope'
-    assert(equal(root:__flush(), { a = { d = { world = 6 }, e = { there = 'nope' } } }))
+    assert(equal(root:__diff(), { a = { d = { world = 6 }, e = { there = 'nope' } } }))
+    assert(equal(root:__flush(true), { a = { d = { world = 6 }, e = { there = 'nope' } } }))
 end
 
 
@@ -162,40 +188,40 @@ local function testAutoApply()
         d = { hello = 2, world = 5 },
         e = { hey = 2, there = { deeper = 42 } },
     }
-    share.apply(target, root:__flush())
+    share.apply(target, root:__flush(true))
     assert(equal(target, root))
 
     -- Leaf
     root.a.d.hello = 3
-    share.apply(target, root:__flush())
+    share.apply(target, root:__flush(true))
     assert(equal(target, root))
 
     -- Sub-table
     root.a.c = { 7, 8, 9 }
-    share.apply(target, root:__flush())
+    share.apply(target, root:__flush(true))
     assert(equal(target, root))
 
     -- Separate paths
     root.a.d.world = 6
     root.a.e.there = 'nope'
-    share.apply(target, root:__flush())
+    share.apply(target, root:__flush(true))
     assert(equal(target, root))
 
     -- `nil`
     root.a.d.world = 6
     root.a.d = nil
     root.a.e.there = nil
-    share.apply(target, root:__flush())
+    share.apply(target, root:__flush(true))
     assert(equal(target, root))
 
     -- Generative
     for i = 1, 5 do
         root.u = genTable(5, 4)
-        share.apply(target, root:__flush())
+        share.apply(target, root:__flush(true))
         assert(equal(target, root))
         for j = 1, 5 do
             editTable(root.u)
-            share.apply(target, root:__flush())
+            share.apply(target, root:__flush(true))
             assert(equal(target, root))
         end
     end

@@ -145,8 +145,8 @@ function Methods:__sync(k)
     end
 end
 
--- Get the diff of this node and unmark as dirty.
-function Methods:__flush(rec, alreadyExact)
+-- Get the diff of this node since the last flush
+function Methods:__diff(rec, alreadyExact)
     local ret = {}
     local proxy = proxies[self]
     local rec = rec or proxy.dirtyRec
@@ -160,25 +160,35 @@ function Methods:__flush(rec, alreadyExact)
     for k in pairs(rec and children or dirty) do
         local v = children[k]
         if proxies[v] then -- Is a child node?
-            ret[k] = v:__flush(rec, alreadyExact)
+            ret[k] = v:__diff(rec, alreadyExact)
         elseif nilled[k] then -- Was `nil`'d?
             ret[k] = v == nil and NILD or v -- Make sure it wasn't un-`nil`'d
             nilled[k] = nil
         else
             ret[k] = v
         end
-        dirty[k] = nil
     end
-    for k in pairs(nilled) do
-        nilled[k] = nil
-    end
-    for k in pairs(dirty) do
-        dirty[k] = nil
-    end
-    assert(not next(dirty), 'nothing should be left in `dirty` at end of `:__flush`')
 
-    proxy.dirtyRec = false
     return ret
+end
+
+-- Unmark everything recursively. If `getDiff`, returns what the diff was before flushing.
+function Methods:__flush(getDiff)
+    local diff = getDiff and self:__diff() or nil
+    local proxy = proxies[self]
+    local children, dirty = proxy.children, proxy.dirty
+    for k in pairs(dirty) do
+        local v = children[k]
+        if proxies[v] then
+            v:__flush()
+        end
+        dirty[k] = nil
+    end
+    if next(proxy.nilled) then
+        proxy.nilled = {}
+    end
+    proxy.dirtyRec = false
+    return diff
 end
 
 -- Mark node for 'auto-sync' -- automatically marks keys for sync when they are edited. If `rec` is
