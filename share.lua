@@ -9,13 +9,26 @@ local type = type
 local tostring = tostring
 
 
+local NILLED = '__NIL' -- Sentinel to encode `nil`-ing in diffs -- TODO(nikki): Make this smaller
+
+
 local Methods = {}
 
 Methods.__isNode = true
 
 
+-- `proxy` per `node` that stores metadata. This is needed because `node`s are 'userdata'-typed.
+--
+--    `.name`: name
+--    `.children`: `child.name` -> `child` (value or node) for all children
+--    `.parent`: parent node, `nil` if root
+--    `.dirty`: `child.name` -> (`true` or `NILLED`)
+--    `.dirtyRec`: whether entire subtree is dirty (recursively)
+--    `.autoSync`: `true` for auto-sync just here, `'rec'` for recursive
 local proxies = setmetatable({}, { mode = 'k' })
 
+
+-- `pairs`, `ipairs` wrappers for nodes
 
 local oldPairs = pairs
 function pairs(t)
@@ -34,6 +47,7 @@ end
 local ipairs = oldIPairs
 
 
+-- Make a node out of of `t` with given `name`, makes a root node if `parent` is `nil`
 local function adopt(parent, name, t)
     local node, proxy
 
@@ -100,12 +114,14 @@ local function adopt(parent, name, t)
 end
 
 
+-- `'name1:name2:...:nameN'` on path to this node
 function Methods:__path()
     local proxy = proxies[self]
     return (proxy.parent and (proxy.parent:__path() .. ':') or '') .. tostring(proxy.name)
 end
 
 
+-- Mark key `k` for sync. If `k` is `nil`, marks everything recursively.
 function Methods:__sync(k)
     local proxy = proxies[self]
 
@@ -137,10 +153,13 @@ function Methods:__sync(k)
     end
 end
 
+-- Get the diff of this node and unmark as dirty.
 function Methods:__flush(rec)
+    local ret = {}
+
     local proxy = proxies[self]
     local rec = rec or proxy.dirtyRec
-    local ret = {}
+
     local children, dirty = proxy.children, proxy.dirty
     for k in pairs(rec and children or dirty) do
         local child = children[k]
@@ -151,10 +170,13 @@ function Methods:__flush(rec)
         end
         dirty[k] = nil
     end
+
     proxy.dirtyRec = false
     return ret
 end
 
+-- Mark node for 'auto-sync' -- automatically marks keys for sync when they are edited. If `rec` is
+-- true, all descendant nodes are marked for auto-sync too. Auto-sync can't be unset once set.
 function Methods:__autoSync(rec)
     local proxy = proxies[self]
     if not proxy.autoSync then
