@@ -20,7 +20,7 @@ Methods.__isNode = true
 -- `proxy` per `node` that stores metadata. This is needed because `node`s are 'userdata'-typed.
 --
 --    `.name`: name
---    `.children`: `child.name` -> `child` (value or node) for all children
+--    `.children`: `child.name` -> `child` (leaf or node) for all children
 --    `.parent`: parent node, `nil` if root
 --    `.dirty`: `child.name` -> (`true` or `NILLED`)
 --    `.dirtyRec`: whether entire subtree is dirty (recursively)
@@ -64,29 +64,29 @@ local function adopt(parent, name, t)
         proxies[node] = proxy
 
         -- Create the `.children` table as our `__index`, with a final lookup in `Methods`
-        local grandchildren = setmetatable({}, { __index = Methods })
-        proxy.children = grandchildren
-        meta.__index = grandchildren
+        local children = setmetatable({}, { __index = Methods })
+        proxy.children = children
+        meta.__index = children
 
         -- Copy everything, recursively adopting child tables
         for k, v in pairs(t) do
             if type(v) == 'table' or proxies[v] then
                 adopt(node, k, v)
             else
-                grandchildren[k] = v
+                children[k] = v
             end
         end
 
         -- Forward `#node`
         function meta.__len()
-            return #grandchildren
+            return #children
         end
 
-        -- Listen for `node[k] = v`
+        -- Listen for `node[k] = v` -- keep this code fast
         function meta.__newindex(t, k, v)
-            if type(v) ~= 'table' and not proxies[v] then -- Leaf -- keep this code path fast
-                grandchildren[k] = v
-            elseif grandchildren[k] ~= v then -- Potential node -- adopt if not already adopted
+            if type(v) ~= 'table' and not proxies[v] then -- Leaf -- just set
+                children[k] = v
+            elseif children[k] ~= v then -- Potential node -- adopt if not already adopted
                 adopt(node, k, v)
             end
         end
@@ -179,18 +179,22 @@ end
 -- true, all descendant nodes are marked for auto-sync too. Auto-sync can't be unset once set.
 function Methods:__autoSync(rec)
     local proxy = proxies[self]
+
+    -- If not already set, set on self
     if not proxy.autoSync then
         local meta = getmetatable(self)
-        local oldNewindex = meta.__newindex
         local children = proxy.children
-        function meta.__newindex(t, k, v)
-            if children[k] ~= v then
+        local oldNewindex = meta.__newindex
+        function meta.__newindex(t, k, v) -- Listen for `node[k] = v` -- keep this code fast
+            if children[k] ~= v then -- Make sure it actually changed
                 oldNewindex(t, k, v)
                 self:__sync(k)
             end
         end
         proxy.autoSync = true
     end
+
+    -- If not already recursive but recursive is desired, recurse
     if proxy.autoSync ~= 'rec' and rec then
         for k, v in pairs(proxy.children) do
             if proxies[v] then
