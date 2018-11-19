@@ -27,6 +27,8 @@ Methods.__isNode = true
 --    `.dirtyRec`: whether all keys are dirty recursively
 --    `.autoSync`: `true` for auto-sync just here, `'rec'` for recursive
 --    `.relevance`: the relevance function if given, `true` if some descendant has one, else `nil`
+--    `.lastRelevancies`: `client` -> `k` -> non-`nil` map for previous relevancies
+--    `.relevanceDescs`: `child.name` -> `true` for keys that lead to a node with relevance
 local proxies = setmetatable({}, { mode = 'k' })
 
 
@@ -81,6 +83,8 @@ local function adopt(parent, name, t)
         proxy.dirtyRec = false
         proxy.autoSync = false
         proxy.relevance = nil
+        proxy.lastRelevancies = nil
+        proxy.relevanceDescs = nil
 
         -- Listen for `node[k] = v` -- keep this code fast
         local nilled = proxy.nilled
@@ -156,25 +160,26 @@ function Methods:__diff(client, rec, alreadyExact)
     local proxy = proxies[self]
     local relevance = proxy.relevance
 
-    local rec = rec or proxy.dirtyRec
-    local children, dirty, nilled = proxy.children, proxy.dirty, proxy.nilled
-
     local ret = {}
 
-    local relevancy
-    if relevance and relevance ~= true then -- Relevance function
-        assert(not alreadyExact, "found a `:__relevance` node in an `alreadyExact` branch...")
+    if relevance then -- Relevance function
+        assert(not alreadyExact, self:__path() ..
+                ': found a `:__relevance` node in an `alreadyExact` branch...')
+
+        -- Compute relevancy
         local lastRelevancy = proxy.lastRelevancies[client]
-        relevancy = relevance(self, client)
+        local relevancy = relevance(self, client)
         proxy.lastRelevancies[client] = relevancy
+
+        local children, dirty = proxy.children, proxy.dirty
         for k in pairs(relevancy) do
-            if not lastRelevancy or not lastRelevancy[k] then
-                ret[k] = children[k]:__diff(client, true, false)
+            if not lastRelevancy or not lastRelevancy[k] then -- Wasn't relevant before, send exact
+                ret[k] = children[k]:__diff(nil, true, false) -- `nil`-out `client` to be sure...
             elseif dirty[k] then
-                ret[k] = children[k]:__diff(client, false, false)
+                ret[k] = children[k]:__diff(nil, false, false)
             end
         end
-        if lastRelevancy then
+        if lastRelevancy then -- `nil`-out things that became irrelevant since the last time
             for k in pairs(lastRelevancy) do
                 if not relevancy[k] then
                     ret[k] = NILD
@@ -182,14 +187,19 @@ function Methods:__diff(client, rec, alreadyExact)
             end
         end
     else
-        if not relevance then
+        local rec = rec or proxy.dirtyRec
+
+        -- Mark as `.__exact` unless there are descendants with relevance
+        local relevanceDescs = proxy.relevanceDescs
+        if not (relevanceDescs and next(relevanceDescs)) then
             if not alreadyExact and rec then
                 ret.__exact = true
                 alreadyExact = true
             end
         end
 
-        for k in pairs(rec and children or dirty) do
+        local children, dirty, nilled = proxy.children, proxy.dirty, proxy.nilled
+        for k in pairs(rec and children or dirty) do -- If `rec` then all children else just `dirty`
             local v = children[k]
             if proxies[v] then -- Is a child node?
                 ret[k] = v:__diff(client, rec, alreadyExact)
@@ -261,18 +271,29 @@ end
 -- relevant to that client (as keys of a table).
 function Methods:__relevance(relevance)
     local proxy = proxies[self]
-    local prevRelevance = proxy.relevance
-    if prevRelevance and not (relevance == true and prevRelevance == true) then
+
+    -- Have descendants with relevance? That's not good...
+    if proxy.relevanceDescs then
         error('nested nodes with `:__relevance`')
     end
+
+    -- Tell ancestors
+    local curr = proxy
+    while curr.parent do
+        local parent = proxies[curr.parent]
+        assert(not parent.relevance, 'nested nodes with `:__relevance`')
+        local relevanceDescs = parent.relevanceDescs
+        if not relevanceDescs then
+            relevanceDescs = {}
+            parent.relevanceDescs = relevanceDescs
+        end
+        relevanceDescs[curr.name] = true
+        curr = parent
+    end
+
+    -- Set up relevance data for this node
     proxy.relevance = relevance
-    if relevance and relevance ~= true then
-        proxy.lastRelevancies = setmetatable({}, { __mode = 'k' })
-    end
-    local parent = proxy.parent
-    if parent then
-        parent:__relevance(true)
-    end
+    proxy.lastRelevancies = setmetatable({}, { __mode = 'k' })
 end
 
 
