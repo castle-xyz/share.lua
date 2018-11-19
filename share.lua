@@ -4,9 +4,10 @@ local setmetatable, getmetatable = setmetatable, getmetatable
 local rawset, rawget = rawset, rawget
 local type = type
 local tostring = tostring
+local next = next
 
 
-local NILLED = '__NIL' -- Sentinel to encode `nil`-ing in diffs -- TODO(nikki): Make this smaller
+local NILD = 'NILD' -- Sentinel to encode `nil`-ing in diffs -- TODO(nikki): Make this smaller
 
 
 local Methods = {}
@@ -19,8 +20,9 @@ Methods.__isNode = true
 --    `.name`: name
 --    `.children`: `child.name` -> `child` (leaf or node) for all children
 --    `.parent`: parent node, `nil` if root
---    `.dirty`: `child.name` -> (`true` or `NILLED`)
---    `.dirtyRec`: whether entire subtree is dirty (recursively)
+--    `.dirty`: `child.name` -> `true` if that key is dirty
+--    `.nilled`: `child.name` -> `true` for keys that got `nil`'d
+--    `.dirtyRec`: whether all keys are dirty recursively
 --    `.autoSync`: `true` for auto-sync just here, `'rec'` for recursive
 local proxies = setmetatable({}, { mode = 'k' })
 
@@ -79,19 +81,22 @@ local function adopt(parent, name, t)
             return #children
         end
 
+        -- Initialize dirtiness
+        proxy.dirty = {}
+        proxy.nilled = {}
+        proxy.dirtyRec = false
+        proxy.autoSync = false
+
         -- Listen for `node[k] = v` -- keep this code fast
+        local nilled = proxy.nilled
         function meta.__newindex(t, k, v)
+            if v == nil then nilled[k] = true end -- Record `nil`'ing
             if type(v) ~= 'table' and not proxies[v] then -- Leaf -- just set
                 children[k] = v
             elseif children[k] ~= v then -- Potential node -- adopt if not already adopted
                 adopt(node, k, v)
             end
         end
-        proxy.autoSync = false
-
-        -- Initialize dirtiness
-        proxy.dirty = {}
-        proxy.dirtyRec = false
     end
 
     -- Set name and join parent link
@@ -143,20 +148,29 @@ end
 -- Get the diff of this node and unmark as dirty.
 function Methods:__flush(rec)
     local ret = {}
-
     local proxy = proxies[self]
     local rec = rec or proxy.dirtyRec
+    local children, dirty, nilled = proxy.children, proxy.dirty, proxy.nilled
 
-    local children, dirty = proxy.children, proxy.dirty
     for k in pairs(rec and children or dirty) do
-        local child = children[k]
-        if proxies[child] then
-            ret[k] = child:__flush(rec)
+        local v = children[k]
+        if proxies[v] then -- Is a child node?
+            ret[k] = v:__flush(rec)
+        elseif nilled[k] then -- Was `nil`'d?
+            ret[k] = v == nil and NILD or v -- Make sure it wasn't un-`nil`'d
+            nilled[k] = nil
         else
-            ret[k] = child
+            ret[k] = v
         end
         dirty[k] = nil
     end
+    for k in pairs(nilled) do
+        nilled[k] = nil
+    end
+    for k in pairs(dirty) do
+        dirty[k] = nil
+    end
+    assert(not next(dirty), 'nothing should be left in `dirty` at end of `:__flush`')
 
     proxy.dirtyRec = false
     return ret

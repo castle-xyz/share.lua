@@ -59,6 +59,13 @@ share.foo.blah.hello = 13
 
 print(serpent.block(share:__flush()))
 
+share.foo.blah.hello = nil
+
+print(serpent.block(share:__flush()))
+
+share.foo.blah = nil
+
+print(serpent.block(share:__flush()))
 
 
 --share:__autoSync(true)
