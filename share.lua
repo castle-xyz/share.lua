@@ -207,4 +207,8 @@ function Methods:__autoSync(rec)
 end
 
 
-return adopt(nil, 'share', {})
+return {
+    new = function(name)
+        return adopt(nil, name or 'root', {})
+    end,
+}
