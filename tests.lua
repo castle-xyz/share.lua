@@ -41,6 +41,8 @@ local function editTable(t)
             t[k] = nil
         elseif r <= 3 then
             t[k] = math.random(10000)
+        elseif r <= 4 then
+            t[k] = genTable(2, 2)
         end
     end
 end
@@ -144,6 +146,32 @@ defTest('testAutoSync', function()
 end)
 
 
+local function tableEquals(t1, t2)
+    if type(t1) ~= 'table' or type(t2) ~= 'table' then
+        print('a')
+        return false
+    end
+    for k, v in pairs(t1) do
+        if type(v) == 'table' then
+            if not tableEquals(v, t2[k]) then
+                print('b')
+                return false
+            end
+        elseif v ~= t2[k] then
+            print(type(v))
+            print(t1:__path(), k)
+            return false
+        end
+    end
+    for k in pairs(t2) do
+        if t1[k] == nil then
+            print('d')
+            return false
+        end
+    end
+    return true
+end
+
 -- Apply with auto-sync
 defTest('testAutoApply', function()
     local root = share.new()
@@ -184,14 +212,14 @@ defTest('testAutoApply', function()
     lu.assertEquals(target, root)
 
     -- Generative
-    for i = 1, 2 do
-        root.u = genTable(2, 2)
+    for i = 1, 5 do
+        root.u = genTable(5, 4)
         share.apply(target, root:__flush())
-        lu.assertEquals(target, root)
-        for j = 1, 1 do
+        lu.assertTrue(tableEquals(root, target))
+        for j = 1, 5 do
             editTable(root.u)
             share.apply(target, root:__flush())
-            lu.assertEquals(target, root)
+            lu.assertTrue(tableEquals(root, target))
         end
     end
 end)
