@@ -333,6 +333,16 @@ local function testAutoSyncRelevance()
             rel = { a = { __exact = true, 'a', 2 } },
         }
     }))
+    assert(equal(root:__diff('a'), {
+        t = {
+            rel = { b = { __exact = true, 'b', 2 } },
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            rel = { a = { __exact = true, 'a', 2 } },
+        }
+    }))
     root:__flush()
 
     -- Sharing with relevance

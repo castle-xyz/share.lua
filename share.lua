@@ -30,7 +30,8 @@ Methods.__isNode = true
 --    `.dirtyRec`: whether all keys are dirty recursively
 --    `.autoSync`: `true` for auto-sync just here, `'rec'` for recursive
 --    `.relevance`: the relevance function if given, `true` if some descendant has one, else `nil`
---    `.lastRelevancies`: `client` -> `k` -> non-`nil` map for previous relevancies
+--    `.lastRelevancies`: `client` -> `k` -> non-`nil` map for relevancies before flush
+--    `.nextRelevancies`: `client` -> `k` -> non-`nil` map for relevancies till next flush
 --    `.relevanceDescs`: `child.name` -> `true` for keys that lead to a node with relevance
 local proxies = setmetatable({}, { mode = 'k' })
 
@@ -171,7 +172,7 @@ function Methods:__diff(client, rec, alreadyExact)
         -- Compute relevancy
         local lastRelevancy = proxy.lastRelevancies[client]
         local relevancy = relevance(self, client)
-        proxy.lastRelevancies[client] = relevancy
+        proxy.nextRelevancies[client] = relevancy
 
         local children, dirty = proxy.children, proxy.dirty
         for k in pairs(relevancy) do
@@ -248,12 +249,33 @@ function Methods:__flush(getDiff, client)
         end
         dirty[k] = nil
     end
+
     if nonempty(proxy.nilled) then
         proxy.nilled = {}
     end
+
     proxy.dirtyRec = false
     proxy.diffCache = nil
     proxy.diffRecCache = nil
+
+    -- Always descend into relevance paths
+    local relevanceDescs = proxy.relevanceDescs
+    if relevanceDescs then
+        for k in pairs(relevanceDescs) do
+            children[k]:__flush()
+        end
+    end
+
+    -- Transer relevancy info to `.lastRelevancies`
+    local nextRelevancies = proxy.nextRelevancies
+    if nextRelevancies then
+        local lastRelevancies = proxy.lastRelevancies
+        for client in pairs(nextRelevancies) do
+            lastRelevancies[client] = nextRelevancies[client]
+            nextRelevancies[client] = nil
+        end
+    end
+
     return diff
 end
 
@@ -321,6 +343,7 @@ function Methods:__relevance(relevance)
     -- Set up relevance data for this node
     proxy.relevance = relevance
     proxy.lastRelevancies = setmetatable({}, { __mode = 'k' })
+    proxy.nextRelevancies = setmetatable({}, { __mode = 'k' })
 end
 
 
