@@ -117,7 +117,7 @@ do
     -- Connect to server
     function client.connect()
         host = enet.host_create()
-        host:connect('192.168.1.80:22122') -- EDIT IP ADDRESS FOR REMOTE SERVER
+        host:connect('127.0.0.1:22122') -- EDIT IP ADDRESS FOR REMOTE SERVER
     end
 
     function client.update(dt)
