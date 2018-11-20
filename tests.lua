@@ -4,7 +4,7 @@ local share = require 'share'
 --local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239f25997b101c585c0daf6a15b7e37fad9/src/serpent.lua'
 
 
-local NILD = 'NILD' -- Sentinel to encode `nil`-ing in diffs -- TODO(nikki): Make this smaller
+local DIFF_NIL = '__NIL' -- Sentinel to encode `nil`-ing in diffs -- TODO(nikki): Make this smaller
 
 
 -- Randomly generate a deep table, branching `nKeys`-ways at each level, with max depth `depth`
@@ -181,8 +181,8 @@ local function testAutoSync()
 
     -- Sync `nil`-ing
     root.a.d = nil
-    assert(equal(root:__diff(), { a = { d = NILD } }))
-    assert(equal(root:__diff(), { a = { d = NILD } }))
+    assert(equal(root:__diff(), { a = { d = DIFF_NIL } }))
+    assert(equal(root:__diff(), { a = { d = DIFF_NIL } }))
 end
 
 
@@ -239,12 +239,12 @@ local function testAutoSyncRelevance()
     root.t.rel:__sync()
     assert(equal(root:__diff('a'), {
         t = {
-            rel = { a = NILD },
+            rel = { a = DIFF_NIL },
         }
     }))
     assert(equal(root:__diff('b'), {
         t = {
-            rel = { b = NILD },
+            rel = { b = DIFF_NIL },
         }
     }))
     root:__flush()
@@ -305,17 +305,17 @@ local function testAutoSyncRelevance()
     root.t.rel.b[3] = nil
     assert(equal(root:__diff('a'), {
         t = {
-            rel = { a = { [3] = NILD } },
+            rel = { a = { [3] = DIFF_NIL } },
         }
     }))
     assert(equal(root:__diff('b'), {
         t = {
-            rel = { b = { [3] = NILD } },
+            rel = { b = { [3] = DIFF_NIL } },
         }
     }))
     assert(equal(root:__diff('b'), {
         t = {
-            rel = { b = { [3] = NILD } },
+            rel = { b = { [3] = DIFF_NIL } },
         }
     }))
     root:__flush()
@@ -377,12 +377,12 @@ local function testAutoSyncRelevance()
     root.t.out = nil
     assert(equal(root:__diff('a'), {
         t = {
-            out = NILD,
+            out = DIFF_NIL,
         }
     }))
     assert(equal(root:__diff('b'), {
         t = {
-            out = NILD,
+            out = DIFF_NIL,
         }
     }))
     root:__flush()
@@ -403,12 +403,12 @@ local function testAutoSyncRelevance()
     root.t.out = nil
     assert(equal(root:__diff('a'), {
         t = {
-            out = NILD,
+            out = DIFF_NIL,
         }
     }))
     assert(equal(root:__diff('b'), {
         t = {
-            out = NILD,
+            out = DIFF_NIL,
         }
     }))
     root:__flush()

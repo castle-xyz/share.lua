@@ -7,7 +7,7 @@ local tostring = tostring
 local next = next
 
 
-local NILD = 'NILD' -- Sentinel to encode `nil`-ing in diffs -- TODO(nikki): Make this smaller
+local DIFF_NIL = '__NIL' -- Sentinel to encode `nil`-ing in diffs -- TODO(nikki): Make this smaller
 
 
 local function nonempty(t) return next(t) ~= nil end
@@ -26,7 +26,6 @@ Methods.__isNode = true
 --    `.children`: `child.name` -> `child` (leaf or node) for all children
 --    `.parent`: parent node, `nil` if root
 --    `.dirty`: `child.name` -> `true` if that key is dirty
---    `.nilled`: `child.name` -> `true` for keys that got `nil`'d
 --    `.dirtyRec`: whether all keys are dirty recursively
 --    `.autoSync`: `true` for auto-sync just here, `'rec'` for recursive
 --    `.relevance`: the relevance function if given, `true` if some descendant has one, else `nil`
@@ -83,7 +82,6 @@ local function adopt(parent, name, t)
 
         -- Initialize dirtiness
         proxy.dirty = {}
-        proxy.nilled = {}
         proxy.dirtyRec = false
         proxy.autoSync = false
         proxy.relevance = nil
@@ -91,9 +89,7 @@ local function adopt(parent, name, t)
         proxy.relevanceDescs = nil
 
         -- Listen for `node[k] = v` -- keep this code fast
-        local nilled = proxy.nilled
         local function newindex(t, k, v)
-            if v == nil then nilled[k] = true end -- Record `nil`'ing
             if type(v) ~= 'table' and not proxies[v] then -- Leaf -- just set
                 children[k] = v
             elseif children[k] ~= v then -- Potential node -- adopt if not already adopted
@@ -185,7 +181,7 @@ function Methods:__diff(client, rec, alreadyExact)
         if lastRelevancy then -- `nil`-out things that became irrelevant since the last time
             for k in pairs(lastRelevancy) do
                 if not relevancy[k] then
-                    ret[k] = NILD
+                    ret[k] = DIFF_NIL
                 end
             end
         end
@@ -219,15 +215,13 @@ function Methods:__diff(client, rec, alreadyExact)
             end
 
             -- If `rec` go through all children else just go through `dirty`
-            local children, nilled = proxy.children, proxy.nilled
+            local children = proxy.children
             for k in pairs(rec and children or proxy.dirty) do
                 local v = children[k]
                 if proxies[v] then -- Is a child node?
                     ret[k] = v:__diff(client, rec, alreadyExact)
-                elseif nilled[k] then -- Was `nil`'d?
-                    ret[k] = v == nil and NILD or v -- Make sure it wasn't un-`nil`'d
                 elseif v == nil then
-                    ret[k] = NILD
+                    ret[k] = DIFF_NIL
                 else
                     ret[k] = v
                 end
@@ -249,10 +243,6 @@ function Methods:__flush(getDiff, client)
             v:__flush()
         end
         dirty[k] = nil
-    end
-
-    if nonempty(proxy.nilled) then
-        proxy.nilled = {}
     end
 
     proxy.dirtyRec = false
@@ -359,7 +349,7 @@ local function apply(t, diff)
     for k, v in pairs(diff) do
         if type(v) == 'table' then
             t[k] = apply(t[k], v)
-        elseif v == NILD then
+        elseif v == DIFF_NIL then
             t[k] = nil
         else
             t[k] = v
