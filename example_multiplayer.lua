@@ -63,7 +63,8 @@ do
                 -- Someone connected?
                 if event.type == 'connect' then
                     peers[event.peer] = true -- Remember this client
-                    event.peer:send(marshal.encode(state:__diff(event.peer, true))) -- Send everything
+                    -- `true` below is for 'exact' -- send full state on connect, not just a diff
+                    event.peer:send(marshal.encode(state:__diff(event.peer, true)))
                 end
 
                 -- Someone disconnected?
