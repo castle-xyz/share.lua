@@ -13,7 +13,7 @@ local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/52
 
 -- You could write server and client code each in separate files and that probably helps make it
 -- clear what's visible to what. But to keep the repo clean and allow testing server-client
--- connection withint the same game, I'm going to keep them in the same file. I hide their data
+-- connection within the same game, I'm going to keep them in the same file. I hide their data
 -- from each other by using separate `do .. end` blocks and not setting any globals.
 
 -- Remember that in ENet, the 'host' represents yourself on the network, while a 'peer' represents
@@ -70,19 +70,23 @@ do
                 if event.type == 'disconnect' then
                     peers[event.peer] = nil
                 end
+
+                -- Received a request?
+                if event.type == 'receive' then
+                    local request = marshal.decode(event.data)
+
+                    -- Keypress?
+                    if request.type == 'keypressed' then
+                        state.key = request.key
+                    end
+
+                    -- Mousepress?
+                    if request.type == 'mousepressed' then
+                        state.x, state.y = request.x, request.y
+                    end
+                end
             end
         end
-    end
-
-    -- TODO(nikki): Actually listen for these on the client and send to server
-
-    function server.keypressed(key)
-        state.key = key
-    end
-
-    function server.mousepressed(x, y)
-        state.x = x
-        state.y = y
     end
 end
 
@@ -129,16 +133,24 @@ do
     end
 
     function client.draw()
-        if state then -- Initially state is `nil` so guard for that
+        if state then -- `nil` till we receive first update, so guard for that
             -- Draw key name at position
             love.graphics.print(state.key, state.x, state.y)
         end
     end
 
-    function client.keypressed()
+    function client.keypressed(key)
+        if peer then -- `nil` till we connect, so guard for that
+            -- Send keypress request to server
+            peer:send(marshal.encode({ type = 'keypressed', key = key }))
+        end
     end
 
     function client.mousepressed(x, y, button)
+        if peer then -- `nil` till we connect, so guard for that
+            -- Send mousepress request to server
+            peer:send(marshal.encode({ type = 'mousepressed', x = x, y = y }))
+        end
     end
 end
 
@@ -164,11 +176,9 @@ function love.keypressed(key)
         client.connect()
     end
 
-    server.keypressed(key)
     client.keypressed(key)
 end
 
 function love.mousepressed(x, y, button)
-    server.mousepressed(x, y, button)
     client.mousepressed(x, y, button)
 end
