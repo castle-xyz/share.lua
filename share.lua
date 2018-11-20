@@ -30,10 +30,15 @@ Methods.__isNode = true
 --    `.dirtyRec`: whether all keys are dirty recursively
 --    `.autoSync`: `true` for auto-sync just here, `'rec'` for recursive
 --
+--    `.caches`: diff-related caches for this subtree till next flush
+--
+--    `.relevanceDescs`: `child.name` -> `true` for keys that have a descendant with relevance
+--
+--  The following are non-`nil` only if this exact node has relevance
+--
 --    `.relevance`: the relevance function if given, `true` if some descendant has one, else `nil`
 --    `.lastRelevancies`: `client` -> `k` -> non-`nil` map for relevancies before flush
 --    `.nextRelevancies`: `client` -> `k` -> non-`nil` map for relevancies till next flush
---    `.relevanceDescs`: `child.name` -> `true` for keys that lead to a node with relevance
 --
 local proxies = setmetatable({}, { __mode = 'k' })
 
@@ -89,7 +94,9 @@ local function adopt(parent, name, t)
         proxy.autoSync = false
         proxy.relevance = nil
         proxy.lastRelevancies = nil
+        proxy.nextRelevancies = nil
         proxy.relevanceDescs = nil
+        proxy.caches = nil
 
         -- Listen for `node[k] = v` -- keep this code fast
         local function newindex(t, k, v)
@@ -159,9 +166,16 @@ end
 -- Get the diff of this node since the last flush.
 --   `client`: the client to get the diff w.r.t
 --   `rec`: whether to get an 'exact' diff of everything
-function Methods:__diff(client, rec, alreadyExact)
+function Methods:__diff(client, rec, alreadyExact, caches)
     local proxy = proxies[self]
     local relevance = proxy.relevance
+    if not caches then
+        caches = proxy.caches
+        if not caches then
+            caches = { diff = {}, diffRec = {} }
+            proxy.caches = caches
+        end
+    end
     if relevance then -- Has a relevance function
         assert(not alreadyExact, self:__path() ..
                 ': found a `:__relevance` node in an `alreadyExact` branch...')
@@ -176,9 +190,9 @@ function Methods:__diff(client, rec, alreadyExact)
         local children, dirty = proxy.children, proxy.dirty
         for k in pairs(relevancy) do
             if not lastRelevancy or not lastRelevancy[k] then -- Wasn't relevant before, send exact
-                ret[k] = children[k]:__diff(nil, true, false) -- `nil`-out `client` to be sure...
+                ret[k] = children[k]:__diff(nil, true, false, caches) -- `nil` `client` to be sure
             elseif dirty[k] then
-                ret[k] = children[k]:__diff(nil, false, false)
+                ret[k] = children[k]:__diff(nil, false, false, caches)
             end
         end
         if lastRelevancy then -- `nil`-out things that became irrelevant since the last time
@@ -195,9 +209,9 @@ function Methods:__diff(client, rec, alreadyExact)
 
         local ret
         if rec then
-            ret = proxy.diffRecCache
+            ret = caches.diffRec[self]
         else
-            ret = proxy.diffCache
+            ret = caches.diff[self]
         end
         if not ret then
             ret = {}
@@ -208,12 +222,12 @@ function Methods:__diff(client, rec, alreadyExact)
                 if not (relevanceDescs and nonempty(relevanceDescs)) then
                     ret.__exact = true
                     alreadyExact = true
-                    proxy.diffRecCache = ret
+                    caches.diffRec[self] = ret
                 end
             elseif not rec then
                 local relevanceDescs = proxy.relevanceDescs
                 if not (relevanceDescs and nonempty(relevanceDescs)) then
-                    proxy.diffCache = ret
+                    caches.diff[self] = ret
                 end
             end
 
@@ -222,7 +236,7 @@ function Methods:__diff(client, rec, alreadyExact)
             for k in pairs(rec and children or proxy.dirty) do
                 local v = children[k]
                 if proxies[v] then -- Is a child node?
-                    ret[k] = v:__diff(client, rec, alreadyExact)
+                    ret[k] = v:__diff(client, rec, alreadyExact, caches)
                 elseif v == nil then
                     ret[k] = DIFF_NIL
                 else
@@ -281,26 +295,24 @@ end
 function Methods:__flush(getDiff, client)
     local diff = getDiff and self:__diff(client) or nil
     local proxy = proxies[self]
-    local children, dirty = proxy.children, proxy.dirty
-    for k in pairs(dirty) do
+    local children, dirty, relevanceDescs = proxy.children, proxy.dirty, proxy.relevanceDescs
+    if relevanceDescs then -- Always descend into relevance paths
+        for k in pairs(relevanceDescs) do
+            children[k]:__flush()
+            dirty[k] = nil -- No need to visit again
+        end
+    end
+    for k in pairs(dirty) do -- Flush everything that's dirty
         local v = children[k]
         if proxies[v] then
             v:__flush()
         end
         dirty[k] = nil
     end
-
     proxy.dirtyRec = false
-    proxy.diffCache = nil
-    proxy.diffRecCache = nil
 
-    -- Always descend into relevance paths
-    local relevanceDescs = proxy.relevanceDescs
-    if relevanceDescs then
-        for k in pairs(relevanceDescs) do
-            children[k]:__flush()
-        end
-    end
+    -- Reset caches
+    proxy.caches = nil
 
     -- Transer relevancy info to `.lastRelevancies`
     local nextRelevancies = proxy.nextRelevancies
