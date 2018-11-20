@@ -419,7 +419,7 @@ end
 local function testAutoApply()
     local root = share.new()
     root:__autoSync(true)
-    local target = {}
+    local target = share.new()
 
     -- Initial table
     root.a = {
@@ -428,40 +428,40 @@ local function testAutoApply()
         d = { hello = 2, world = 5 },
         e = { hey = 2, there = { deeper = 42 } },
     }
-    share.apply(target, root:__flush(true))
+    target:__apply(root:__flush(true))
     assert(equal(target, root))
 
     -- Leaf
     root.a.d.hello = 3
-    share.apply(target, root:__flush(true))
+    target:__apply(root:__flush(true))
     assert(equal(target, root))
 
     -- Sub-table
     root.a.c = { 7, 8, 9 }
-    share.apply(target, root:__flush(true))
+    target:__apply(root:__flush(true))
     assert(equal(target, root))
 
     -- Separate paths
     root.a.d.world = 6
     root.a.e.there = 'nope'
-    share.apply(target, root:__flush(true))
+    target:__apply(root:__flush(true))
     assert(equal(target, root))
 
     -- `nil`
     root.a.d.world = 6
     root.a.d = nil
     root.a.e.there = nil
-    share.apply(target, root:__flush(true))
+    target:__apply(root:__flush(true))
     assert(equal(target, root))
 
     -- Generative
     for i = 1, 20 do
         root.u = genTable(8, 7)
-        share.apply(target, root:__flush(true))
+        target:__apply(root:__flush(true))
         assert(equal(target, root))
         for j = 1, 30 do
             editTable(root.u)
-            share.apply(target, root:__flush(true))
+            target:__apply(root:__flush(true))
             assert(equal(target, root))
         end
     end
@@ -492,9 +492,9 @@ local function testAutoApplyRelevance()
     end)
 
     -- New clients
-    local targetA, targetB = {}, {}
-    share.apply(targetA, root:__diff('a', true))
-    share.apply(targetB, root:__diff('b', true))
+    local targetA, targetB = share.new(), share.new()
+    targetA:__apply(root:__diff('a', true))
+    targetB:__apply(root:__diff('b', true))
     root:__flush()
     assert(equal(targetA, {
         world = {
@@ -514,8 +514,8 @@ local function testAutoApplyRelevance()
     }))
 
     -- No change
-    share.apply(targetA, root:__diff('a'))
-    share.apply(targetB, root:__diff('b'))
+    targetA:__apply(root:__diff('a'))
+    targetB:__apply(root:__diff('b'))
     root:__flush()
     assert(equal(targetA, {
         world = {
@@ -536,8 +536,8 @@ local function testAutoApplyRelevance()
 
     -- New 'entity'
     root.world.rel[4] = { a = true, b = true }
-    share.apply(targetA, root:__diff('a'))
-    share.apply(targetB, root:__diff('b'))
+    targetA:__apply(root:__diff('a'))
+    targetB:__apply(root:__diff('b'))
     root:__flush()
     assert(equal(targetA, {
         world = {
@@ -560,8 +560,8 @@ local function testAutoApplyRelevance()
 
     -- Entity became relevant
     root.world.rel[2].b = true
-    share.apply(targetA, root:__diff('a'))
-    share.apply(targetB, root:__diff('b'))
+    targetA:__apply(root:__diff('a'))
+    targetB:__apply(root:__diff('b'))
     root:__flush()
     assert(equal(targetA, {
         world = {
@@ -585,8 +585,8 @@ local function testAutoApplyRelevance()
 
     -- Entity became irrelevant
     root.world.rel[4].b = nil
-    share.apply(targetA, root:__diff('a'))
-    share.apply(targetB, root:__diff('b'))
+    targetA:__apply(root:__diff('a'))
+    targetB:__apply(root:__diff('b'))
     root:__flush()
     assert(equal(targetA, {
         world = {
