@@ -1,6 +1,9 @@
 local share = require 'share'
 
 
+--local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239f25997b101c585c0daf6a15b7e37fad9/src/serpent.lua'
+
+
 local NILD = 'NILD' -- Sentinel to encode `nil`-ing in diffs -- TODO(nikki): Make this smaller
 
 
@@ -175,6 +178,11 @@ local function testAutoSync()
     root.a.e.there = 'nope'
     assert(equal(root:__diff(), { a = { d = { world = 6 }, e = { there = 'nope' } } }))
     assert(equal(root:__flush(true), { a = { d = { world = 6 }, e = { there = 'nope' } } }))
+
+    -- Sync `nil`-ing
+    root.a.d = nil
+    assert(equal(root:__diff(), { a = { d = NILD } }))
+    assert(equal(root:__diff(), { a = { d = NILD } }))
 end
 
 
@@ -182,8 +190,6 @@ end
 local function testAutoSyncRelevance()
     local root = share.new()
     root:__autoSync(true)
-
-    local isRelevant = true
 
     -- Just use client ids as keys for ease in testing
 
@@ -196,9 +202,7 @@ local function testAutoSyncRelevance()
         },
         norm = { 1, 2, 3 },
     }
-    root.t.rel:__relevance(function (node, client)
-        return isRelevant and { [client] = true } or {}
-    end)
+    root.t.rel:__relevance(function (node, client) return { [client] = true } end)
 
     -- a and b enter
     assert(equal(root:__diff('a'), {
@@ -231,7 +235,7 @@ local function testAutoSyncRelevance()
     root:__flush()
 
     -- Make irrelevant
-    isRelevant = false
+    root.t.rel:__relevance(function (node, client) return {} end)
     root.t.rel:__sync()
     assert(equal(root:__diff('a'), {
         t = {
@@ -246,7 +250,7 @@ local function testAutoSyncRelevance()
     root:__flush()
 
     -- Make relevant again
-    isRelevant = true
+    root.t.rel:__relevance(function (node, client) return { [client] = true } end)
     root.t.rel:__sync()
     assert(equal(root:__diff('a'), {
         t = {
@@ -276,6 +280,7 @@ local function testAutoSyncRelevance()
             norm = { [4] = 4 },
         }
     }))
+    assert(root:__diff('a').t.norm == root:__diff('b').t.norm, 'use diff cache')
     root:__flush()
 
     -- No changes
@@ -294,6 +299,56 @@ local function testAutoSyncRelevance()
     }))
     root:__flush()
     assert(equal(root:__diff('a'), nil))
+
+    -- Update with `nil`-ing
+    root.t.rel.a[3] = nil
+    root.t.rel.b[3] = nil
+    assert(equal(root:__diff('a'), {
+        t = {
+            rel = { a = { [3] = NILD } },
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            rel = { b = { [3] = NILD } },
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            rel = { b = { [3] = NILD } },
+        }
+    }))
+    root:__flush()
+
+    -- Sharing with relevance
+    root.t.rel:__relevance(function (node, client) return { a = true, b = true } end)
+    root.t.rel:__sync()
+    assert(equal(root:__diff('a'), {
+        t = {
+            rel = { b = { __exact = true, 'b', 2 } },
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            rel = { a = { __exact = true, 'a', 2 } },
+        }
+    }))
+    root:__flush()
+
+    -- Sharing with relevance
+    root.t.rel.a[7] = 7
+    assert(equal(root:__diff('a'), {
+        t = {
+            rel = { a = { [7] = 7 } },
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            rel = { a = { [7] = 7 } },
+        }
+    }))
+    assert(root:__diff('b').t.rel.a == root:__diff('a').t.rel.a, 'use diff cache')
+    root:__flush()
 end
 
 -- Apply with auto-sync
@@ -336,11 +391,11 @@ local function testAutoApply()
     assert(equal(target, root))
 
     -- Generative
-    for i = 1, 5 do
-        root.u = genTable(5, 4)
+    for i = 1, 20 do
+        root.u = genTable(8, 7)
         share.apply(target, root:__flush(true))
         assert(equal(target, root))
-        for j = 1, 5 do
+        for j = 1, 30 do
             editTable(root.u)
             share.apply(target, root:__flush(true))
             assert(equal(target, root))

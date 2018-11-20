@@ -10,6 +10,9 @@ local next = next
 local NILD = 'NILD' -- Sentinel to encode `nil`-ing in diffs -- TODO(nikki): Make this smaller
 
 
+local function nonempty(t) return next(t) ~= nil end
+
+
 local Methods = {}
 
 Methods.__isNode = true
@@ -139,7 +142,7 @@ function Methods:__sync(k, rec)
     end
 
     -- Set and recurse on parent -- skipping parent if `dirty` is non-empty (we'd've done it before)
-    local skipParent = next(dirty)
+    local skipParent = nonempty(dirty)
     if k == nil then
         if rec then
             proxy.dirtyRec = true
@@ -159,12 +162,11 @@ end
 function Methods:__diff(client, rec, alreadyExact)
     local proxy = proxies[self]
     local relevance = proxy.relevance
-
-    local ret = {}
-
-    if relevance then -- Relevance function
+    if relevance then -- Has a relevance function
         assert(not alreadyExact, self:__path() ..
                 ': found a `:__relevance` node in an `alreadyExact` branch...')
+
+        local ret = {}
 
         -- Compute relevancy
         local lastRelevancy = proxy.lastRelevancies[client]
@@ -186,35 +188,52 @@ function Methods:__diff(client, rec, alreadyExact)
                 end
             end
         end
-    else
+
+        return nonempty(ret) and ret or nil
+    else -- No relevance function
         local rec = rec or proxy.dirtyRec
 
-        -- Mark as `.__exact` unless there are descendants with relevance
-        local relevanceDescs = proxy.relevanceDescs
-        if not (relevanceDescs and next(relevanceDescs)) then
+        local ret
+        if rec then
+            ret = proxy.diffRecCache
+        else
+            ret = proxy.diffCache
+        end
+        if not ret then
+            ret = {}
+
+            -- If newly `rec, mark as `.__exact` unless there are descendants with relevance
             if not alreadyExact and rec then
-                ret.__exact = true
-                alreadyExact = true
+                local relevanceDescs = proxy.relevanceDescs
+                if not (relevanceDescs and nonempty(relevanceDescs)) then
+                    ret.__exact = true
+                    alreadyExact = true
+                    proxy.diffRecCache = ret
+                end
+            elseif not rec then
+                local relevanceDescs = proxy.relevanceDescs
+                if not (relevanceDescs and nonempty(relevanceDescs)) then
+                    proxy.diffCache = ret
+                end
+            end
+
+            -- If `rec` go through all children else just go through `dirty`
+            local children, nilled = proxy.children, proxy.nilled
+            for k in pairs(rec and children or proxy.dirty) do
+                local v = children[k]
+                if proxies[v] then -- Is a child node?
+                    ret[k] = v:__diff(client, rec, alreadyExact)
+                elseif nilled[k] then -- Was `nil`'d?
+                    ret[k] = v == nil and NILD or v -- Make sure it wasn't un-`nil`'d
+                    nilled[k] = nil
+                else
+                    ret[k] = v
+                end
             end
         end
 
-        local children, dirty, nilled = proxy.children, proxy.dirty, proxy.nilled
-        for k in pairs(rec and children or dirty) do -- If `rec` then all children else just `dirty`
-            local v = children[k]
-            if proxies[v] then -- Is a child node?
-                ret[k] = v:__diff(client, rec, alreadyExact)
-            elseif nilled[k] then -- Was `nil`'d?
-                ret[k] = v == nil and NILD or v -- Make sure it wasn't un-`nil`'d
-                nilled[k] = nil
-            else
-                ret[k] = v
-            end
-        end
+        return nonempty(ret) and ret or nil
     end
-    if not next(ret) then
-        ret = nil
-    end
-    return ret
 end
 
 -- Unmark everything recursively. If `getDiff`, returns what the diff was before flushing.
@@ -229,10 +248,12 @@ function Methods:__flush(getDiff, client)
         end
         dirty[k] = nil
     end
-    if next(proxy.nilled) then
+    if nonempty(proxy.nilled) then
         proxy.nilled = {}
     end
     proxy.dirtyRec = false
+    proxy.diffCache = nil
+    proxy.diffRecCache = nil
     return diff
 end
 
@@ -271,6 +292,12 @@ end
 -- relevant to that client (as keys of a table).
 function Methods:__relevance(relevance)
     local proxy = proxies[self]
+
+    -- Already had one and just updating? We don't need to do the rest of the work
+    if proxy.relevance then
+        proxy.relevance = relevance
+        return
+    end
 
     -- Have descendants with relevance? That's not good...
     if proxy.relevanceDescs then
