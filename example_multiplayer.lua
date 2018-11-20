@@ -10,6 +10,10 @@ local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/52
 -- the mouse to change where it's displayed.
 --
 -- Press 1 to start the server, and 2 to connect the client.
+--
+-- To try connecting as a client to a remote server, start the server there by pressing 1. Edit
+-- the line that says "EDIT IP ADDRESS FOR REMOTE SERVER" below to contain the ip address of that
+-- computer. Run the edited code on the client and press 2.
 
 -- You could write server and client code each in separate files and that probably helps make it
 -- clear what's visible to what. But to keep the repo clean and allow testing server-client
@@ -52,7 +56,7 @@ do
                 peer:send(marshal.encode(diff))
             end
         end
-        state:__flush()
+        state:__flush() -- Make sure to reset diff state after sending!
 
         -- Process network events
         if host then
@@ -108,7 +112,7 @@ do
     -- Connect to server
     function client.connect()
         host = enet.host_create()
-        host:connect('127.0.0.1:22122')
+        host:connect('127.0.0.1:22122') -- EDIT IP ADDRESS FOR REMOTE SERVER
     end
 
     function client.update(dt)
