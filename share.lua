@@ -32,7 +32,7 @@ Methods.__isNode = true
 --    `.lastRelevancies`: `client` -> `k` -> non-`nil` map for relevancies before flush
 --    `.nextRelevancies`: `client` -> `k` -> non-`nil` map for relevancies till next flush
 --    `.relevanceDescs`: `child.name` -> `true` for keys that lead to a node with relevance
-local proxies = setmetatable({}, { mode = 'k' })
+local proxies = setmetatable({}, { __mode = 'k' })
 
 
 -- `pairs`, `ipairs` wrappers for nodes
