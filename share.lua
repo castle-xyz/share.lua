@@ -226,7 +226,8 @@ function Methods:__diff(client, rec, alreadyExact)
                     ret[k] = v:__diff(client, rec, alreadyExact)
                 elseif nilled[k] then -- Was `nil`'d?
                     ret[k] = v == nil and NILD or v -- Make sure it wasn't un-`nil`'d
-                    nilled[k] = nil
+                elseif v == nil then
+                    ret[k] = NILD
                 else
                     ret[k] = v
                 end

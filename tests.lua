@@ -202,7 +202,7 @@ local function testAutoSyncRelevance()
         },
         norm = { 1, 2, 3 },
     }
-    root.t.rel:__relevance(function (node, client) return { [client] = true } end)
+    root.t.rel:__relevance(function (self, client) return { [client] = true } end)
 
     -- a and b enter
     assert(equal(root:__diff('a'), {
@@ -235,7 +235,7 @@ local function testAutoSyncRelevance()
     root:__flush()
 
     -- Make irrelevant
-    root.t.rel:__relevance(function (node, client) return {} end)
+    root.t.rel:__relevance(function (self, client) return {} end)
     root.t.rel:__sync()
     assert(equal(root:__diff('a'), {
         t = {
@@ -250,7 +250,7 @@ local function testAutoSyncRelevance()
     root:__flush()
 
     -- Make relevant again
-    root.t.rel:__relevance(function (node, client) return { [client] = true } end)
+    root.t.rel:__relevance(function (self, client) return { [client] = true } end)
     root.t.rel:__sync()
     assert(equal(root:__diff('a'), {
         t = {
@@ -359,7 +359,61 @@ local function testAutoSyncRelevance()
     }))
     assert(root:__diff('b').t.rel.a == root:__diff('a').t.rel.a, 'use diff cache')
     root:__flush()
+
+    -- Outside stuff
+    root.t.out = 3
+    assert(equal(root:__diff('a'), {
+        t = {
+            out = 3,
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            out = 3,
+        }
+    }))
+    root:__flush()
+
+    root.t.out = nil
+    assert(equal(root:__diff('a'), {
+        t = {
+            out = NILD,
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            out = NILD,
+        }
+    }))
+    root:__flush()
+
+    root.t.out = 3
+    assert(equal(root:__diff('a'), {
+        t = {
+            out = 3,
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            out = 3,
+        }
+    }))
+    root:__flush()
+
+    root.t.out = nil
+    assert(equal(root:__diff('a'), {
+        t = {
+            out = NILD,
+        }
+    }))
+    assert(equal(root:__diff('b'), {
+        t = {
+            out = NILD,
+        }
+    }))
+    root:__flush()
 end
+
 
 -- Apply with auto-sync
 local function testAutoApply()
@@ -414,11 +468,153 @@ local function testAutoApply()
 end
 
 
+-- Apply with auto-sync and relevance
+local function testAutoApplyRelevance()
+    local root = share.new()
+    root:__autoSync(true)
+
+    root.world = {
+        rel = {
+            -- Each of these is relevant to client `c` only if it contains `[c] = true` init
+            [1] = { a = true, b = true },
+            [2] = { a = true },
+            [3] = { b = true },
+        }
+    }
+    root.world.rel:__relevance(function(self, client)
+        local ret = {}
+        for k, v in pairs(self) do
+            if v[client] then
+                ret[k] = true
+            end
+        end
+        return ret
+    end)
+
+    -- New clients
+    local targetA, targetB = {}, {}
+    share.apply(targetA, root:__diff('a', true))
+    share.apply(targetB, root:__diff('b', true))
+    root:__flush()
+    assert(equal(targetA, {
+        world = {
+            rel = {
+                [1] = { a = true, b = true },
+                [2] = { a = true },
+            }
+        }
+    }))
+    assert(equal(targetB, {
+        world = {
+            rel = {
+                [1] = { a = true, b = true },
+                [3] = { b = true },
+            }
+        }
+    }))
+
+    -- No change
+    share.apply(targetA, root:__diff('a'))
+    share.apply(targetB, root:__diff('b'))
+    root:__flush()
+    assert(equal(targetA, {
+        world = {
+            rel = {
+                [1] = { a = true, b = true },
+                [2] = { a = true },
+            }
+        }
+    }))
+    assert(equal(targetB, {
+        world = {
+            rel = {
+                [1] = { a = true, b = true },
+                [3] = { b = true },
+            }
+        }
+    }))
+
+    -- New 'entity'
+    root.world.rel[4] = { a = true, b = true }
+    share.apply(targetA, root:__diff('a'))
+    share.apply(targetB, root:__diff('b'))
+    root:__flush()
+    assert(equal(targetA, {
+        world = {
+            rel = {
+                [1] = { a = true, b = true },
+                [2] = { a = true },
+                [4] = { a = true, b = true },
+            }
+        }
+    }))
+    assert(equal(targetB, {
+        world = {
+            rel = {
+                [1] = { a = true, b = true },
+                [3] = { b = true },
+                [4] = { a = true, b = true },
+            }
+        }
+    }))
+
+    -- Entity became relevant
+    root.world.rel[2].b = true
+    share.apply(targetA, root:__diff('a'))
+    share.apply(targetB, root:__diff('b'))
+    root:__flush()
+    assert(equal(targetA, {
+        world = {
+            rel = {
+                [1] = { a = true, b = true },
+                [2] = { a = true, b = true },
+                [4] = { a = true, b = true },
+            }
+        }
+    }))
+    assert(equal(targetB, {
+        world = {
+            rel = {
+                [1] = { a = true, b = true },
+                [2] = { a = true, b = true },
+                [3] = { b = true },
+                [4] = { a = true, b = true },
+            }
+        }
+    }))
+
+    -- Entity became irrelevant
+    root.world.rel[4].b = nil
+    share.apply(targetA, root:__diff('a'))
+    share.apply(targetB, root:__diff('b'))
+    root:__flush()
+    assert(equal(targetA, {
+        world = {
+            rel = {
+                [1] = { a = true, b = true },
+                [2] = { a = true, b = true },
+                [4] = { a = true  },
+            }
+        }
+    }))
+    assert(equal(targetB, {
+        world = {
+            rel = {
+                [1] = { a = true, b = true },
+                [2] = { a = true, b = true },
+                [3] = { b = true },
+            }
+        }
+    }))
+end
+
+
 testBasic()
 testSync()
 testAutoSync()
 testAutoSyncRelevance()
 testAutoApply()
+testAutoApplyRelevance()
 
 
 print('no errors? then everything passed...')
