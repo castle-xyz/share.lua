@@ -9,11 +9,11 @@ local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/52
 -- Super basic example where you can press keys to show the key name on the screen, and click with
 -- the mouse to change where it's displayed.
 --
--- Press 1 to start the server, and 2 to connect the client.
+-- Press 0 to start the server. Click to connect the client (allows connecting by touch on mobile).
 --
--- To try connecting as a client to a remote server, start the server there by pressing 1. Edit
+-- To try connecting as a client to a remote server, start the server there by pressing 0. Edit
 -- the line that says "EDIT IP ADDRESS FOR REMOTE SERVER" below to contain the ip address of that
--- computer. Run the edited code on the client and press 2.
+-- computer. Run the edited code on the client and click.
 
 -- You could write server and client code each in separate files and that probably helps make it
 -- clear what's visible to what. But to keep the repo clean and allow testing server-client
@@ -31,6 +31,8 @@ local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/52
 
 local server = {}
 do
+    server.started = false -- Export started state for use below
+
     -- The shared state. This will be synced to all clients.
     local state = share.new('state')
     state:__autoSync(true)
@@ -46,6 +48,7 @@ do
     -- Start server
     function server.start()
         host = enet.host_create('*:22122')
+        server.started = true
     end
 
     function server.update(dt)
@@ -102,6 +105,8 @@ end
 
 local client = {}
 do
+    client.connected = false -- Export connected state for use below
+
     -- View of server's shared state from this client. Initially `nil`.
     local state
 
@@ -112,7 +117,7 @@ do
     -- Connect to server
     function client.connect()
         host = enet.host_create()
-        host:connect('127.0.0.1:22122') -- EDIT IP ADDRESS FOR REMOTE SERVER
+        host:connect('192.168.1.80:22122') -- EDIT IP ADDRESS FOR REMOTE SERVER
     end
 
     function client.update(dt)
@@ -125,6 +130,7 @@ do
                 -- Connected?
                 if event.type == 'connect' then
                     peer = event.peer
+                    client.connected = true
                 end
 
                 -- Received state diff?
@@ -174,16 +180,16 @@ function love.draw()
 end
 
 function love.keypressed(key)
-    if key == '1' then
+    if not server.started and key == '0' then
         server.start()
-    end
-    if key == '2' then
-        client.connect()
     end
 
     client.keypressed(key)
 end
 
 function love.mousepressed(x, y, button)
+    if not client.connected then
+        client.connect()
+    end
     client.mousepressed(x, y, button)
 end
