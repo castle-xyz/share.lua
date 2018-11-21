@@ -176,9 +176,6 @@ function Methods:__diff(client, rec, alreadyExact, caches)
         end
     end
     if relevance then -- Has a relevance function
-        assert(not alreadyExact, self:__path() ..
-                ': found a `:__relevance` node in an `alreadyExact` branch...')
-
         local ret = {}
 
         -- Compute relevancy
@@ -188,8 +185,9 @@ function Methods:__diff(client, rec, alreadyExact, caches)
 
         local children, dirty = proxy.children, proxy.dirty
         for k in pairs(relevancy) do
-            if not lastRelevancy or not lastRelevancy[k] then -- Wasn't relevant before, send exact
-                ret[k] = children[k]:__diff(nil, true, false, caches) -- `nil` `client` to be sure
+            -- Send exact if want exact or if it was previously irrelevant and just became relevant
+            if rec or (not lastRelevancy or not lastRelevancy[k]) then
+                ret[k] = children[k]:__diff(nil, true, rec, caches)
             elseif dirty[k] then
                 ret[k] = children[k]:__diff(nil, false, false, caches)
             end
@@ -218,9 +216,9 @@ function Methods:__diff(client, rec, alreadyExact, caches)
             -- If newly `rec, mark as `.__exact` unless there are descendants with relevance
             if not alreadyExact and rec then
                 local relevanceDescs = proxy.relevanceDescs
+                ret.__exact = true
+                alreadyExact = true
                 if not (relevanceDescs and nonempty(relevanceDescs)) then
-                    ret.__exact = true
-                    alreadyExact = true
                     caches.diffRec[self] = ret
                 end
             elseif not rec then

@@ -207,14 +207,16 @@ local function testAutoSyncRelevance()
     -- a and b enter
     assert(equal(root:__diff('a'), {
         t = {
-            rel = { a = { __exact = true, 'a' } },
-            norm = { __exact = true, 1, 2, 3 },
+            __exact = true,
+            rel = { a = { 'a' } },
+            norm = { 1, 2, 3 },
         }
     }))
     assert(equal(root:__diff('b'), {
         t = {
-            rel = { b = { __exact = true, 'b' } },
-            norm = { __exact = true, 1, 2, 3 },
+            __exact = true,
+            rel = { b = { 'b' } },
+            norm = { 1, 2, 3 },
         }
     }))
     root:__flush()
@@ -292,9 +294,10 @@ local function testAutoSyncRelevance()
     assert(equal(root:__diff('a'), nil))
     assert(equal(root:__diff('b'), nil))
     assert(equal(root:__diff('d', true), {
+        __exact = true,
         t = {
-            rel = { d = { __exact = true, 'd' } },
-            norm = { __exact = true, 1, 2, 3, 4 },
+            rel = { d = { 'd' } },
+            norm = { 1, 2, 3, 4 },
         }
     }))
     root:__flush()
@@ -493,8 +496,8 @@ local function testAutoApplyRelevance()
 
     -- New clients
     local targetA, targetB = {}, {}
-    state.apply(targetA, root:__diff('a', true))
-    state.apply(targetB, root:__diff('b', true))
+    targetA = state.apply(targetA, root:__diff('a', true))
+    targetB = state.apply(targetB, root:__diff('b', true))
     root:__flush()
     assert(equal(targetA, {
         world = {
