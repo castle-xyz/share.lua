@@ -34,7 +34,7 @@ do
     server.started = false -- Export started state for use below
 
     -- The shared state. This will be synced to all clients.
-    local state = share.new('state')
+    local state = share.new()
     state:__autoSync(true)
 
     -- Initial state
