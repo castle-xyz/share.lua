@@ -1,28 +1,9 @@
-local share = require 'share'
+local state = require 'state'
 
 
 local enet = require 'enet' -- Network
 local marshal = require 'marshal' -- Serialization
 local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239f25997b101c585c0daf6a15b7e37fad9/src/serpent.lua' -- Table printing
-
-
--- Super basic example where you can press keys to show the key name on the screen, and click with
--- the mouse to change where it's displayed.
---
--- Press 0 to start the server. Click to connect the client (allows connecting by touch on mobile).
---
--- To try connecting as a client to a remote server, start the server there by pressing 0. Edit
--- the line that says "EDIT IP ADDRESS FOR REMOTE SERVER" below to contain the ip address of that
--- computer. Run the edited code on the client and click.
-
--- You could write server and client code each in separate files and that probably helps make it
--- clear what's visible to what. But to keep the repo clean and allow testing server-client
--- connection within the same game, I'm going to keep them in the same file. I hide their data
--- from each other by using separate `do .. end` blocks and not setting any globals.
-
--- Remember that in ENet, the 'host' represents yourself on the network, while a 'peer' represents
--- someone else. So the server has one host and many peers (the clients), and each client has one
--- host and one peer (the server).
 
 
 ----------------------------------------------------------------------------------------------------
@@ -31,15 +12,15 @@ local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/52
 
 local server = {}
 do
-    server.started = false -- Export started state for use below
+    server.started = false -- Export started share for use below
 
     -- The shared state. This will be synced to all clients.
-    local state = share.new()
-    state:__autoSync(true)
+    local share = state.new()
+    share:__autoSync(true)
 
-    -- Initial state
-    state.key = 'no key'
-    state.x, state.y = 20, 20
+    -- Initial share
+    share.key = 'no key'
+    share.x, share.y = 20, 20
 
     -- Network stuff
     local host -- The host
@@ -52,14 +33,14 @@ do
     end
 
     function server.update(dt)
-        -- Send state updates to everyone
+        -- Send share updates to everyone
         for peer in pairs(peers) do
-            local diff = state:__diff(peer)
+            local diff = share:__diff(peer)
             if diff ~= nil then -- `nil` if nothing changed
                 peer:send(marshal.encode(diff))
             end
         end
-        state:__flush() -- Make sure to reset diff state after sending!
+        share:__flush() -- Make sure to reset diff share after sending!
 
         -- Process network events
         if host then
@@ -70,8 +51,8 @@ do
                 -- Someone connected?
                 if event.type == 'connect' then
                     peers[event.peer] = true -- Remember this client
-                    -- `true` below is for 'exact' -- send full state on connect, not just a diff
-                    event.peer:send(marshal.encode(state:__diff(event.peer, true)))
+                    -- `true` below is for 'exact' -- send full share on connect, not just a diff
+                    event.peer:send(marshal.encode(share:__diff(event.peer, true)))
                 end
 
                 -- Someone disconnected?
@@ -85,12 +66,12 @@ do
 
                     -- Keypress?
                     if request.type == 'keypressed' then
-                        state.key = request.key
+                        share.key = request.key
                     end
 
                     -- Mousepress?
                     if request.type == 'mousepressed' then
-                        state.x, state.y = request.x, request.y
+                        share.x, share.y = request.x, request.y
                     end
                 end
             end
@@ -105,10 +86,10 @@ end
 
 local client = {}
 do
-    client.connected = false -- Export connected state for use below
+    client.connected = false -- Export connected share for use below
 
-    -- View of server's shared state from this client. Initially `nil`.
-    local state
+    -- View of server's stated share from this client. Initially `nil`.
+    local share
 
     -- Network stuff
     local host -- The host
@@ -133,20 +114,20 @@ do
                     client.connected = true
                 end
 
-                -- Received state diff?
+                -- Received share diff?
                 if event.type == 'receive' then
                     local diff = marshal.decode(event.data)
                     print('received', serpent.block(diff)) -- Print the diff, for debugging
-                    state = share.apply(state, diff)
+                    share = state.apply(share, diff)
                 end
             end
         end
     end
 
     function client.draw()
-        if state then -- `nil` till we receive first update, so guard for that
+        if share then -- `nil` till we receive first update, so guard for that
             -- Draw key name at position
-            love.graphics.print(state.key, state.x, state.y)
+            love.graphics.print(share.key, share.x, share.y)
         end
     end
 

@@ -1,7 +1,6 @@
 local assert = assert
 local newproxy = newproxy
 local setmetatable, getmetatable = setmetatable, getmetatable
-local rawset, rawget = rawset, rawget
 local type = type
 local tostring = tostring
 local next = next
@@ -380,4 +379,6 @@ return {
     end,
 
     apply = apply,
+
+    DIFF_NIL = DIFF_NIL,
 }
