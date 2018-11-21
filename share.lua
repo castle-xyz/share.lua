@@ -249,48 +249,6 @@ function Methods:__diff(client, rec, alreadyExact, caches)
     end
 end
 
--- Apply a diff returned by `:__diff` or `:__flush`
-function Methods:__apply(diff)
-    if diff == nil then -- Empty?
-        return
-    end
-
-    local proxy = proxies[self]
-    local children = proxy.children
-
-    if diff.__exact then -- Exact? We need to replace ourselves.
-        diff.__exact = nil
-
-        local parent = proxy.parent
-        if parent then -- We can just replace ourselves in the parent and stop early
-            adopt(parent, proxy.name, diff)
-            return
-        else -- We're the root -- just remove extra keys we have and continue
-            for k in pairs(children) do
-                if not diff[k] then
-                    children[k] = nil
-                end
-            end
-        end
-    end
-
-    for k, v in pairs(diff) do
-        if type(v) == 'table' then -- Deeper diff
-            local curr = children[k]
-            if proxies[curr] then -- Already have a node here? Apply to it.
-                curr:__apply(v)
-            else -- No node here, just create a new one.
-                curr = adopt(self, k, {})
-                curr:__apply(v)
-            end
-        elseif v == DIFF_NIL then -- `nil`'ing out?
-            children[k] = nil
-        else -- Leaf value, just set
-            children[k] = v
-        end
-    end
-end
-
 -- Unmark everything recursively. If `getDiff`, returns what the diff was before flushing.
 function Methods:__flush(getDiff, client)
     local diff = getDiff and self:__diff(client) or nil
