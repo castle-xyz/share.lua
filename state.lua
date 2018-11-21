@@ -202,7 +202,7 @@ function Methods:__diff(client, rec, alreadyExact, caches)
             end
         end
 
-        return nonempty(ret) and ret or nil
+        return (rec or nonempty(ret)) and ret or nil
     else -- No relevance function
         local rec = rec or proxy.dirtyRec
 
@@ -244,7 +244,7 @@ function Methods:__diff(client, rec, alreadyExact, caches)
             end
         end
 
-        return nonempty(ret) and ret or nil
+        return (rec or nonempty(ret)) and ret or nil
     end
 end
 

@@ -3,6 +3,8 @@ local state = require 'state'
 
 local enet = require 'enet' -- Network
 local marshal = require 'marshal' -- Serialization
+local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239f25997b101c585c0daf6a15b7e37fad9/src/serpent.lua'
+
 
 
 local server = {}
@@ -13,8 +15,8 @@ do
     local share = state.new()
     share:__autoSync(true)
     server.share = share
-    local boxes = {}
-    server.boxes = {}
+    local homes = {}
+    server.homes = {}
 
     local host
     local peers = {}
@@ -29,16 +31,7 @@ do
         server.started = true
     end
 
-    function server.update(dt)
-        -- Send state updates to everyone
-        for peer in pairs(peers) do
-            local diff = share:__diff(peer)
-            if diff ~= nil then -- `nil` if nothing changed
-                peer:send(marshal.encode({ diff = diff }))
-            end
-        end
-        share:__flush() -- Make sure to reset diff state after sending!
-
+    function server.preupdate()
         -- Process network events
         if host then
             while true do
@@ -50,7 +43,7 @@ do
                     local id = nextId
                     nextId = nextId + 1
                     peers[event.peer] = { id = id }
-                    boxes[id] = {}
+                    homes[id] = {}
                     if server.connect then
                         server.connect(id)
                     end
@@ -66,7 +59,7 @@ do
                     if server.disconnect then
                         server.disconnect(id)
                     end
-                    boxes[id] = nil
+                    homes[id] = nil
                     peers[event.peer] = nil
                 end
 
@@ -87,7 +80,7 @@ do
                         if server.changing then
                             server.changing(id, request.diff)
                         end
-                        assert(state.apply(boxes[id], request.diff) == boxes[id])
+                        assert(state.apply(homes[id], request.diff) == homes[id])
                         if server.changed then
                             server.changed(id, request.diff)
                         end
@@ -96,14 +89,14 @@ do
                         if server.changing then
                             server.changing(id, request.exact)
                         end
-                        local box = boxes[id]
-                        local new = state.apply(box, request.exact)
+                        local home = homes[id]
+                        local new = state.apply(home, request.exact)
                         for k, v in pairs(new) do
-                            box[k] = v
+                            home[k] = v
                         end
-                        for k in pairs(box) do
+                        for k in pairs(home) do
                             if not new[k] then
-                                box[k] = nil
+                                home[k] = nil
                             end
                         end
                         if server.changed then
@@ -112,6 +105,21 @@ do
                     end
                 end
             end
+        end
+    end
+
+    function server.postupdate()
+        -- Send state updates to everyone
+        for peer in pairs(peers) do
+            local diff = share:__diff(peer)
+            if diff ~= nil then -- `nil` if nothing changed
+                peer:send(marshal.encode({ diff = diff }))
+            end
+        end
+        share:__flush() -- Make sure to reset diff state after sending!
+
+        if host then
+            host:flush() -- Tell ENet to send outgoing messages
         end
     end
 end
@@ -125,8 +133,9 @@ do
 
     local share = {}
     client.share = share
-    local box = state.new()
-    box:__autoSync(true)
+    local home = state.new()
+    home:__autoSync(true)
+    client.home = home
 
     local host
     local peer
@@ -143,16 +152,7 @@ do
         end
     end
 
-    function client.update(dt)
-        -- Send state updates to server
-        if peer then
-            local diff = box:__diff(peer)
-            if diff ~= nil then -- `nil` if nothing changed
-                peer:send(marshal.encode({ diff = diff }))
-            end
-        end
-        box:__flush() -- Make sure to reset diff state after sending!
-
+    function client.preupdate(dt)
         -- Process network events
         if host then
             while true do
@@ -211,10 +211,25 @@ do
                         if client.connect then
                             client.connect()
                         end
-                        peer:send(marshal.encode({ exact = box:__diff(peer, true) }))
+                        peer:send(marshal.encode({ exact = home:__diff(peer, true) }))
                     end
                 end
             end
+        end
+    end
+
+    function client.postupdate(dt)
+        -- Send state updates to server
+        if peer then
+            local diff = home:__diff(peer)
+            if diff ~= nil then -- `nil` if nothing changed
+                peer:send(marshal.encode({ diff = diff }))
+            end
+        end
+        home:__flush() -- Make sure to reset diff state after sending!
+
+        if host then
+            host:flush() -- Tell ENet to send outgoing messages
         end
     end
 end
@@ -261,15 +276,27 @@ local loveCbs = {
 for cbName, where in pairs(loveCbs) do
     love[cbName] = function(...)
         if where.server and server.enabled then
+            if cbName == 'update' then
+                server.preupdate(...)
+            end
             local serverCb = server[cbName]
             if serverCb then
                 serverCb(...)
             end
+            if cbName == 'update' then
+                server.postupdate(...)
+            end
         end
         if where.client and client.enabled then
+            if cbName == 'update' then
+                client.preupdate(...)
+            end
             local clientCb = client[cbName]
             if clientCb then
                 clientCb(...)
+            end
+            if cbName == 'update' then
+                client.postupdate(...)
             end
         end
     end
