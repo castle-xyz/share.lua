@@ -45,7 +45,7 @@ function client.draw()
         -- Draw other mice
         for id, mouse in pairs(share.mice) do
             if id ~= client.id then -- Only throw others' mice this way
-                love.graphics.circle('fill', home.mouse.x, home.mouse.y, 30, 30)
+                love.graphics.circle('fill', mouse.x, mouse.y, 30, 30)
             end
         end
     else

@@ -38,6 +38,11 @@ end
 
 function server.update(dt)
     for id, home in pairs(server.homes) do -- Combine mouse info from clients into share
-        share.mice[id] = home.mouse
+        local mouse = share.mice[id]
+        if mouse then -- Don't create new tables unnecessarily
+            mouse.x, mouse.y = home.mouse.x, home.mouse.y
+        else
+            share.mice[id] = home.mouse
+        end
     end
 end

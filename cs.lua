@@ -16,7 +16,7 @@ do
     share:__autoSync(true)
     server.share = share
     local homes = {}
-    server.homes = {}
+    server.homes = homes
 
     local host
     local peers = {}
