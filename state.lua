@@ -171,25 +171,26 @@ end
 -- Mark key `k` for sync. If `k` is `nil` and `rec` is `true`, marks everything recursively.
 function Methods:__sync(k, rec)
     local proxy = proxies[self]
-    local dirty = proxy.dirty
-
-    -- Skip all this work if already dirty
-    if proxy.dirtyRec or dirty[k] then
-        return
-    end
-
-    -- Set and recurse on parent -- skipping parent if `dirty` is non-empty (we'd've done it before)
-    local skipParent = nonempty(dirty)
-    if k == nil then
-        if rec then
-            proxy.dirtyRec = true
+    while true do -- We could use tail recursion but let's be explicit
+        if proxy.dirtyRec then return end -- Commonly hit if editing a newly added table
+        local dirty = proxy.dirty
+        local somePrevDirty -- If some other key was dirty -- commonly hit if many edits to a table
+        if k == nil then
+            if rec then
+                proxy.dirtyRec = true
+            end
+            somePrevDirty = nonempty(dirty)
+        else
+            if dirty[k] then return end -- We can skip the `next` call in this case
+            somePrevDirty = nonempty(dirty)
+            dirty[k] = true
         end
-    else
-        dirty[k] = true
-    end
-    local parent = proxy.parent
-    if not skipParent and parent then
-        parent:__sync(proxy.name)
+        if somePrevDirty then return end -- We can skip parent -- we'd've done it for the other key
+
+        local parent = proxy.parent -- Proceed to mark self as dirty in parent
+        if not parent then return end
+        k = proxy.name
+        proxy = proxies[parent]
     end
 end
 
