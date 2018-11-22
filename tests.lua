@@ -36,7 +36,7 @@ local function editTable(t)
 end
 
 -- Compare tables for deep equality, returning whether equal and along with a helpful message if not
-local function deep(x) return type(x) == 'table' or type(x) == 'userdata' and x.__isNode end
+local function deep(x) return type(x) == 'table' or state.isState(x) end
 local function equal(a, b)
     if a == b then return true end
     if not (deep(a) and deep(b)) then
@@ -717,7 +717,7 @@ local function testAutoApplyRelevanceNested()
     local relevance = function(self, client)
         local ret = {}
         for k, v in pairs(self) do
-            if (type(v) == 'table' or (type(v) == 'userdata' and v.__isNode)) and v[client] then
+            if (type(v) == 'table' or state.isState(v)) and v[client] then
                 ret[k] = true
             elseif type(v) == 'boolean' then
                 ret[k] = true
@@ -807,13 +807,13 @@ local function testAutoApplyRelevanceNested()
 end
 
 
---testBasic()
---testSync()
---testAutoSync()
---testAutoSyncRelevance()
---testAutoApply()
---testAutoApplyRelevance()
---testAutoApplyRelevanceAtRoot()
+testBasic()
+testSync()
+testAutoSync()
+testAutoSyncRelevance()
+testAutoApply()
+testAutoApplyRelevance()
+testAutoApplyRelevanceAtRoot()
 testAutoApplyRelevanceNested()
 
 

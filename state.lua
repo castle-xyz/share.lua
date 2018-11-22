@@ -14,8 +14,6 @@ local function nonempty(t) return next(t) ~= nil end
 
 local Methods = {}
 
-Methods.__isNode = true
-
 
 -- `proxy` per `node` that stores metadata. This is needed because `node`s are 'userdata'-typed.
 -- Being 'userdata'-typed allows forwarding the `#node` operator and prevents mistaking it for a
@@ -368,12 +366,20 @@ local function apply(t, diff)
 end
 
 
+-- Return whether it's a state node
+local function isState(t)
+    return proxies[t] ~= nil
+end
+
+
 return {
     new = function(t, name)
         return adopt(nil, name or 'root', t or {})
     end,
 
     apply = apply,
+
+    isState = isState,
 
     DIFF_NIL = DIFF_NIL,
 }
