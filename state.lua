@@ -97,10 +97,43 @@ local function adopt(parent, name, t)
 
         -- Listen for `node[k] = v` -- keep this code fast
         local function newindex(t, k, v)
-            if type(v) ~= 'table' and not proxies[v] then -- Leaf -- just set
+            local vProxy = proxies[v]
+            if type(v) ~= 'table' and not vProxy then -- Leaf -- just set
                 children[k] = v
-            elseif children[k] ~= v then -- Potential node -- adopt if not already adopted
-                adopt(node, k, v)
+            elseif children[k] ~= v then -- If it's reference-equal we don't need to do anything...
+                local child = children[k]
+                local childProxy = proxies[child]
+                if not childProxy then -- Not previously a node here, just make a new one
+                    adopt(node, k, v)
+                else -- There's already a node here, let's see if we should edit vs. overwrite
+                    local childChildren = childProxy.children
+                    local vChildren = vProxy and vProxy.children or v
+                    local nSame, nNew, nRemove = 0, 0, 0
+                    for kp in pairs(vChildren) do
+                        if childChildren[kp] then
+                            nSame = nSame + 1
+                        else
+                            nNew = nNew + 1
+                        end
+                    end
+                    for kp in pairs(childChildren) do
+                        if not vChildren[kp] then
+                            nRemove = nRemove + 1
+                        end
+                    end
+                    if nSame < nNew + 0.5 * nRemove then -- Not worth it, just overwrite
+                        adopt(node, k, v)
+                    else -- Editing could be worth it
+                        for kp, vp in pairs(vChildren) do
+                            child[kp] = vp
+                        end
+                        for kp in pairs(childChildren) do
+                            if not vChildren[kp] then
+                                child[kp] = nil
+                            end
+                        end
+                    end
+                end
             end
         end
         meta.__newindex = newindex

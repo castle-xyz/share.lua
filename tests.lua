@@ -169,9 +169,35 @@ local function testAutoSync()
 
     -- Sync sub-table
     root.a.c = { 7, 8, 9 }
-    assert(equal(root:__diff(), { a = { c = { __exact = true, 7, 8, 9 } } }))
-    assert(equal(root:__diff(), { a = { c = { __exact = true, 7, 8, 9 } } }))
-    assert(equal(root:__flush(true), { a = { c = { __exact = true, 7, 8, 9 } } }))
+    assert(equal(root:__diff(), { a = { c = { 7, 8, 9 } } }))
+    assert(equal(root:__diff(), { a = { c = { 7, 8, 9 } } }))
+    assert(equal(root:__flush(true), { a = { c = { 7, 8, 9 } } }))
+
+    -- Sync sub-table with no diff
+    root.a.c = { 7, 8, 9 }
+    assert(equal(root:__diff(), nil))
+    assert(equal(root:__diff(), nil))
+    assert(equal(root:__flush(true), nil))
+
+    -- Sync sub-table with edit
+    root.a.c = { 7, 8, { 'hello', 'world' } }
+    assert(equal(root:__diff(), { a = { c = { [3] = { __exact = true, 'hello', 'world' } } }}))
+    root:__flush()
+
+    -- Sync sub-table with delete
+    root.a.c = { 7, { 'hello', 'world' } }
+    assert(equal(root:__diff(), { a = { c = { [2] = { __exact = true, 'hello', 'world' }, [3] = DIFF_NIL } }}))
+    root:__flush()
+
+    -- Sync sub-table with overwrite due to lots of additions
+    root.a.c = { 7, { 'hello', 'world' }, 8, 9, 10, 11, 12, 13 }
+    assert(equal(root:__diff(), { a = { c = { __exact = true, 7, { 'hello', 'world' }, 8, 9, 10, 11, 12, 13 } }}))
+    root:__flush()
+
+    -- Sync sub-table with overwrite due to lots of removals
+    root.a.c = { 7 }
+    assert(equal(root:__diff(), { a = { c = { __exact = true, 7 } }}))
+    root:__flush()
 
     -- Sync separate paths
     root.a.d.world = 6
