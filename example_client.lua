@@ -44,10 +44,13 @@ function client.draw()
 
         -- Draw other mice
         for id, mouse in pairs(share.mice) do
-            if id ~= client.id then -- Only throw others' mice this way
+            if id ~= client.id then -- Only draw others' mice this way
                 love.graphics.circle('fill', mouse.x, mouse.y, 30, 30)
             end
         end
+
+        -- Draw our ping
+        love.graphics.print('ping: ' .. client.getPing(), 20, 20)
     else
         love.graphics.print('not connected', 20, 20)
     end

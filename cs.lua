@@ -19,7 +19,8 @@ do
     server.homes = homes
 
     local host
-    local peers = {}
+    local peerToId = {}
+    local idToPeer = {}
     local nextId = 1
 
     function server.start(port)
@@ -29,6 +30,10 @@ do
         end
         host:compress_with_range_coder()
         server.started = true
+    end
+
+    function server.getPing(id)
+        return assert(idToPeer[id], 'no connected client with this `id`'):round_trip_time()
     end
 
     function server.preupdate()
@@ -42,7 +47,8 @@ do
                 if event.type == 'connect' then
                     local id = nextId
                     nextId = nextId + 1
-                    peers[event.peer] = { id = id }
+                    peerToId[event.peer] = { id = id }
+                    idToPeer[id] = event.peer
                     homes[id] = {}
                     if server.connect then
                         server.connect(id)
@@ -55,17 +61,18 @@ do
 
                 -- Someone disconnected?
                 if event.type == 'disconnect' then
-                    local id = peers[event.peer].id
+                    local id = peerToId[event.peer].id
                     if server.disconnect then
                         server.disconnect(id)
                     end
                     homes[id] = nil
-                    peers[event.peer] = nil
+                    idToPeer[id] = nil
+                    peerToId[event.peer] = nil
                 end
 
                 -- Received a request?
                 if event.type == 'receive' then
-                    local id = peers[event.peer].id
+                    local id = peerToId[event.peer].id
                     local request = marshal.decode(event.data)
 
                     -- Message?
@@ -110,7 +117,7 @@ do
 
     function server.postupdate()
         -- Send state updates to everyone
-        for peer in pairs(peers) do
+        for peer in pairs(peerToId) do
             local diff = share:__diff(peer)
             if diff ~= nil then -- `nil` if nothing changed
                 peer:send(marshal.encode({ diff = diff }))
@@ -150,6 +157,10 @@ do
         if peer then
             peer:send({ message = { nArgs = select('#', ...), ... } })
         end
+    end
+
+    function client.getPing()
+        return assert(peer, 'client is not connected'):round_trip_time()
     end
 
     function client.preupdate(dt)
