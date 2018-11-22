@@ -202,22 +202,33 @@ function Methods:__diff(client, exact, alreadyExact, caches)
         end
 
         local children, dirty = proxy.children, proxy.dirty
-        if relevance then -- Has a relevance function -- check the relevancy
+        if relevance then -- Has a relevance function -- only go through children in relevancy
+            -- In the below we make sure not to put `DIFF_NIL`s in an exact diff
             local lastRelevancy = proxy.lastRelevancies[client]
             local relevancy = relevance(self, client)
             proxy.nextRelevancies[client] = relevancy
             for k in pairs(relevancy) do
                 -- Send exact if it was previously irrelevant and just became relevant
-                if exact or (not lastRelevancy or not lastRelevancy[k]) then
-                    ret[k] = children[k]:__diff(nil, true, exact, caches)
-                elseif dirty[k] then
-                    ret[k] = children[k]:__diff(nil, false, false, caches)
+                local exactHere = exact or (not lastRelevancy or not lastRelevancy[k])
+                if exactHere or dirty[k] then
+                    local v = children[k]
+                    if proxies[v] then
+                        ret[k] = v:__diff(client, exactHere, alreadyExact, caches)
+                    elseif v == nil then
+                        if not exact then
+                            ret[k] = DIFF_NIL
+                        end
+                    else
+                        ret[k] = v
+                    end
                 end
             end
-            if lastRelevancy then -- `nil`-out things that became irrelevant since the last time
-                for k in pairs(lastRelevancy) do
-                    if not relevancy[k] then
-                        ret[k] = DIFF_NIL
+            if not exact then
+                if lastRelevancy then -- `nil`-out things that became irrelevant since the last time
+                    for k in pairs(lastRelevancy) do
+                        if not relevancy[k] then
+                            ret[k] = DIFF_NIL
+                        end
                     end
                 end
             end
@@ -226,7 +237,7 @@ function Methods:__diff(client, exact, alreadyExact, caches)
                 local v = children[k]
                 if proxies[v] then -- Is a child node?
                     ret[k] = v:__diff(client, exact, alreadyExact, caches)
-                elseif v == nil then
+                elseif v == nil then -- This can only happen if `not exact`
                     ret[k] = DIFF_NIL
                 else
                     ret[k] = v
@@ -316,16 +327,10 @@ function Methods:__relevance(relevance)
         return
     end
 
-    -- Have descendants with relevance? That's not good...
-    if proxy.relevanceDescs then
-        error('nested nodes with `:__relevance`')
-    end
-
     -- Tell ancestors
     local curr = proxy
     while curr.parent do
         local parent = proxies[curr.parent]
-        assert(not parent.relevance, 'nested nodes with `:__relevance`')
         local relevanceDescs = parent.relevanceDescs
         if not relevanceDescs then
             relevanceDescs = {}
