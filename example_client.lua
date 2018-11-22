@@ -3,7 +3,7 @@ local client = cs.client
 
 
 client.enabled = true
-client.start('207.254.45.246:22122') -- IP address ('127.0.0.1' is same computer) and port of server
+client.start('127.0.0.1:22122') -- IP address ('127.0.0.1' is same computer) and port of server
 
 
 -- Client connects to server. It gets a unique `id` to identify it.
@@ -42,21 +42,18 @@ end
 
 function client.draw()
     if client.connected then
+        -- Draw our own mouse in a special way (bigger radius)
+        love.graphics.circle('fill', home.mouse.x, home.mouse.y, 40, 40)
+
         -- Draw other mice
         for id, mouse in pairs(share.mice) do
             if id ~= client.id then -- Only draw others' mice this way
-                love.graphics.setColor(mouse.r, mouse.g, mouse.b)
                 love.graphics.circle('fill', mouse.x, mouse.y, 30, 30)
             end
         end
 
-        -- Draw our own mouse in a special way (bigger radius)
-        love.graphics.setColor(1, 1, 1)
-        love.graphics.circle('fill', home.mouse.x, home.mouse.y, 40, 40)
-
         -- Draw our ping
         love.graphics.print('ping: ' .. client.getPing(), 20, 20)
-        love.graphics.print('\nfps: ' .. love.timer.getFPS(), 20, 20)
     else
         love.graphics.print('not connected', 20, 20)
     end
