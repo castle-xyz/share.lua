@@ -67,7 +67,7 @@ do
 
                 -- Someone disconnected?
                 if event.type == 'disconnect' then
-                    local id = peerToId[event.peer].id
+                    local id = peerToId[event.peer]
                     if server.disconnect then
                         server.disconnect(id)
                     end
