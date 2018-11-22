@@ -21,6 +21,12 @@ local homes = server.homes -- `homes[id]` maps to `client.home` for that `id` --
 
 
 function server.connect(id) -- Called on connect from client with `id`
+    share.mice[id] = {
+        x = 0, y = 0,
+        r = math.random(),
+        g = math.random(),
+        b = math.random(),
+    }
 end
 
 function server.disconnect(id) -- Called on disconnect from client with `id`
@@ -35,10 +41,57 @@ end
 
 function server.load()
     share.mice = {}
+    local w, h = love.graphics.getDimensions()
+    for i = 200, 4000 do
+        share.mice[i] = {
+            x = w * math.random(), y = h * math.random(),
+            r = math.random(),
+            g = math.random(),
+            b = math.random(),
+            oscSpeed = math.random(),
+        }
+    end
+    share.mice:__relevance(function(self, id)
+        local keys = {}
+        for i = 200, 600 do
+            keys[i] = true
+        end
+        return keys
+    end)
 end
 
 function server.update(dt)
     for id, home in pairs(server.homes) do -- Combine mouse info from clients into share
-        share.mice[id] = home.mouse
+        if home.mouse then
+            local mouse = share.mice[id]
+            mouse.x, mouse.y = home.mouse.x, home.mouse.y
+        end
+    end
+    for id, mouse in pairs(share.mice) do
+        if mouse.oscSpeed then
+            mouse.x = mouse.x + 10 * mouse.oscSpeed * math.sin(love.timer.getTime())
+        end
     end
 end
+
+function love.draw()
+    love.graphics.print('fps: ' .. love.timer.getFPS(), 20, 20)
+end
+
+--local profile = require 'https://bitbucket.org/itraykov/profile.lua/raw/87ed5148b5def03002b38f80350794c2ddf7ba1d/profile.lua'
+--
+--profile.hookall('Lua')
+--profile.start()
+--
+--local timeTillNextReport = 0
+--local oldUpdate = love.update
+--function love.update(dt)
+--    oldUpdate(dt)
+--
+--    timeTillNextReport = timeTillNextReport - dt
+--    if timeTillNextReport <= 0 then
+--        print(profile.report())
+--        profile.reset()
+--        timeTillNextReport = 10
+--    end
+--end
