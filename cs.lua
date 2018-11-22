@@ -32,6 +32,12 @@ do
         server.started = true
     end
 
+    function server.send(id, ...)
+        assert(idToPeer[id], 'no connected client with this `id`'):send(marshal.encode({
+            message = { nArgs = select('#', ...), ... },
+        }))
+    end
+
     function server.getPing(id)
         return assert(idToPeer[id], 'no connected client with this `id`'):round_trip_time()
     end
@@ -154,9 +160,9 @@ do
     end
 
     function client.send(...)
-        if peer then
-            peer:send({ message = { nArgs = select('#', ...), ... } })
-        end
+        assert(peer, 'client is not connected'):send(marshal.encode({
+            message = { nArgs = select('#', ...), ... },
+        }))
     end
 
     function client.getPing()
@@ -185,6 +191,13 @@ do
                 -- Received a request?
                 if event.type == 'receive' then
                     local request = marshal.decode(event.data)
+
+                    -- Message?
+                    if request.message then
+                        if client.receive then
+                            client.receive(unpack(request.message, 1, request.message.nArgs))
+                        end
+                    end
 
                     -- Diff / exact? (do this first so we have it in `.connect` below)
                     if request.diff then

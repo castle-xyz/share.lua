@@ -12,17 +12,20 @@ client.start('127.0.0.1:22122') -- IP address ('127.0.0.1' is same computer) and
 -- `client.home` represents the home for this client that only it can write to and only server can
 -- read from. `client.id` is the `id` for this client (set once it connects).
 --
--- Client can also send individual messages using `client.send(...)` to server.
+-- Client can also send or receive individual messages to or from server.
 
 
 local share = client.share -- Maps to `server.share` -- can read
-local home = client.home -- Maps to `server.homes[client.id]` -- can write
+local home = client.home -- Maps to `server.homes[id]` with our `id` -- can write
 
 
 function client.connect() -- Called on connect from server
 end
 
 function client.disconnect() -- Called on disconnect from server
+end
+
+function client.receive(...) -- Called when server does `server.send(id, ...)` with our `id`
 end
 
 
@@ -55,4 +58,3 @@ function client.draw()
         love.graphics.print('not connected', 20, 20)
     end
 end
-

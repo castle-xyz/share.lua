@@ -13,7 +13,7 @@ server.start('22122') -- Port of server
 -- that `id` can write to (clients can't see each other's homes). Thus the server gets data
 -- from each client and combines them for all clients to see.
 --
--- Server can also receive individual messages from `client.send(...)` on client.
+-- Server can also send or receive individual messages to or from any client.
 
 
 local share = server.share -- Maps to `client.share` -- can write
@@ -26,11 +26,12 @@ end
 function server.disconnect(id) -- Called on disconnect from client with `id`
 end
 
-function server.receive(id, ...) -- Called on `client.send(...)` from client with `id`
+function server.receive(id, ...) -- Called when client with `id` does `client.send(...)`
 end
 
 
--- Server only gets `.load` and `.update` Love events
+-- Server only gets `.load`, `.update`, `.quit` Love events (also `.lowmemory` and `.threaderror`
+-- which are less commonly used)
 
 function server.load()
     share.mice = {}
