@@ -152,7 +152,7 @@ local function adopt(parent, name, t)
         parentProxy.children[name] = node
 
         if parentProxy.autoSync == 'rec' then
-            proxy.dirtyRec = true
+            node:__sync(nil, true) -- We were newly added
             node:__autoSync(true)
         end
     end
@@ -170,9 +170,20 @@ end
 
 -- Mark key `k` for sync. If `k` is `nil` and `rec` is `true`, marks everything recursively.
 function Methods:__sync(k, rec)
-    local proxy = proxies[self]
-    while true do -- We could use tail recursion but let's be explicit
-        if proxy.dirtyRec then return end -- Commonly hit if editing a newly added table
+    local start = proxies[self]
+
+    do -- Abort if any ancestor has `.dirtyRec` since that means we're all dirty anyways
+        local proxy = start
+        while true do
+            if proxy.dirtyRec then return end
+            local parent = proxy.parent
+            if not parent then break end
+            proxy = proxies[parent]
+        end
+    end
+
+    local proxy = start
+    while true do
         local dirty = proxy.dirty
         local somePrevDirty -- If some other key was dirty -- commonly hit if many edits to a table
         if k == nil then
@@ -400,12 +411,6 @@ local function apply(t, diff)
 end
 
 
--- Return whether it's a state node
-local function isState(t)
-    return proxies[t] ~= nil
-end
-
-
 return {
     new = function(t, name)
         return adopt(nil, name or 'root', t or {})
@@ -413,7 +418,8 @@ return {
 
     apply = apply,
 
-    isState = isState,
+    isState = function(t) return proxies[t] ~= nil end,
+    getProxy = function(t) return proxies[t] end,
 
     DIFF_NIL = DIFF_NIL,
 }
