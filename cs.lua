@@ -53,7 +53,7 @@ do
                 if event.type == 'connect' then
                     local id = nextId
                     nextId = nextId + 1
-                    peerToId[event.peer] = { id = id }
+                    peerToId[event.peer] = id
                     idToPeer[id] = event.peer
                     homes[id] = {}
                     if server.connect then
@@ -61,7 +61,7 @@ do
                     end
                     event.peer:send(marshal.encode({
                         id = id,
-                        exact = share:__diff(event.peer, true),
+                        exact = share:__diff(id, true),
                     }))
                 end
 
@@ -78,7 +78,7 @@ do
 
                 -- Received a request?
                 if event.type == 'receive' then
-                    local id = peerToId[event.peer].id
+                    local id = peerToId[event.peer]
                     local request = marshal.decode(event.data)
 
                     -- Message?
@@ -123,8 +123,8 @@ do
 
     function server.postupdate()
         -- Send state updates to everyone
-        for peer in pairs(peerToId) do
-            local diff = share:__diff(peer)
+        for peer, id in pairs(peerToId) do
+            local diff = share:__diff(id)
             if diff ~= nil then -- `nil` if nothing changed
                 peer:send(marshal.encode({ diff = diff }))
             end
@@ -235,7 +235,7 @@ do
                         if client.connect then
                             client.connect()
                         end
-                        peer:send(marshal.encode({ exact = home:__diff(peer, true) }))
+                        peer:send(marshal.encode({ exact = home:__diff(0, true) }))
                     end
                 end
             end
@@ -245,7 +245,7 @@ do
     function client.postupdate(dt)
         -- Send state updates to server
         if peer then
-            local diff = home:__diff(peer)
+            local diff = home:__diff(0)
             if diff ~= nil then -- `nil` if nothing changed
                 peer:send(marshal.encode({ diff = diff }))
             end
