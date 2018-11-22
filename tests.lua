@@ -612,12 +612,109 @@ local function testAutoApplyRelevance()
 end
 
 
+-- Apply with auto-sync and relevance at root
+local function testAutoApplyRelevanceAtRoot()
+    local root = state.new()
+    root:__autoSync(true)
+
+    root[1] = { a = true, b = true }
+    root[2] = { a = true }
+    root[3] = { b = true }
+
+    root:__relevance(function(self, client)
+        local ret = {}
+        for k, v in pairs(self) do
+            if v[client] then
+                ret[k] = true
+            end
+        end
+        return ret
+    end)
+
+    -- New clients
+    local targetA, targetB = {}, {}
+    targetA = state.apply(targetA, root:__diff('a', true))
+    targetB = state.apply(targetB, root:__diff('b', true))
+    root:__flush()
+    assert(equal(targetA, {
+        [1] = { a = true, b = true },
+        [2] = { a = true },
+    }))
+    assert(equal(targetB, {
+        [1] = { a = true, b = true },
+        [3] = { b = true },
+    }))
+
+    -- No change
+    state.apply(targetA, root:__diff('a'))
+    state.apply(targetB, root:__diff('b'))
+    root:__flush()
+    assert(equal(targetA, {
+        [1] = { a = true, b = true },
+        [2] = { a = true },
+    }))
+    assert(equal(targetB, {
+        [1] = { a = true, b = true },
+        [3] = { b = true },
+    }))
+
+    -- New 'entity'
+    root[4] = { a = true, b = true }
+    state.apply(targetA, root:__diff('a'))
+    state.apply(targetB, root:__diff('b'))
+    root:__flush()
+    assert(equal(targetA, {
+        [1] = { a = true, b = true },
+        [2] = { a = true },
+        [4] = { a = true, b = true },
+    }))
+    assert(equal(targetB, {
+        [1] = { a = true, b = true },
+        [3] = { b = true },
+        [4] = { a = true, b = true },
+    }))
+
+    -- Entity became relevant
+    root[2].b = true
+    state.apply(targetA, root:__diff('a'))
+    state.apply(targetB, root:__diff('b'))
+    root:__flush()
+    assert(equal(targetA, {
+        [1] = { a = true, b = true },
+        [2] = { a = true, b = true },
+        [4] = { a = true, b = true },
+    }))
+    assert(equal(targetB, {
+        [1] = { a = true, b = true },
+        [2] = { a = true, b = true },
+        [3] = { b = true },
+        [4] = { a = true, b = true },
+    }))
+
+    -- Entity became irrelevant
+    root[4].b = nil
+    state.apply(targetA, root:__diff('a'))
+    state.apply(targetB, root:__diff('b'))
+    root:__flush()
+    assert(equal(targetA, {
+        [1] = { a = true, b = true },
+        [2] = { a = true, b = true },
+        [4] = { a = true  },
+    }))
+    assert(equal(targetB, {
+        [1] = { a = true, b = true },
+        [2] = { a = true, b = true },
+        [3] = { b = true },
+    }))
+end
+
 testBasic()
 testSync()
 testAutoSync()
 testAutoSyncRelevance()
 testAutoApply()
 testAutoApplyRelevance()
+testAutoApplyRelevanceAtRoot()
 
 
 print('no errors? then everything passed...')
