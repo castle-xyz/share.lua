@@ -33,9 +33,12 @@ do
     end
 
     function server.send(id, ...)
-        assert(idToPeer[id], 'no connected client with this `id`'):send(marshal.encode({
-            message = { nArgs = select('#', ...), ... },
-        }))
+        local data = marshal.encode({ message = { nArgs = select('#', ...), ... } })
+        if id == 'all' then
+            host:broadcast(data)
+        else
+            assert(idToPeer[id], 'no connected client with this `id`'):send(data)
+        end
     end
 
     function server.getPing(id)
