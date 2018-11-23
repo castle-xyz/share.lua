@@ -483,6 +483,15 @@ local function testAutoApply()
     state.apply(target, root:__flush(true))
     assert(equal(target, root))
 
+    -- Containing `dirtyRec` table
+    root.f = {}
+    root.f.g = { r = 10 }
+    state.apply(target, root:__flush(true))
+    assert(equal(target, root))
+    root.f.g.r = 20
+    state.apply(target, root:__flush(true))
+    assert(equal(target, root))
+
     -- Generative
     for i = 1, 20 do
         root.u = genTable(8, 7)
