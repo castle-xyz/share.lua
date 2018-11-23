@@ -167,6 +167,10 @@ function Methods:__path()
     return (proxy.parent and (proxy.parent:__path() .. ':') or '') .. tostring(proxy.name)
 end
 
+-- This node as a table -- be careful about editing the table (normal events won't fire)
+function Methods:__table()
+    return proxies[self].children
+end
 
 -- Mark key `k` for sync. If `k` is `nil` and `rec` is `true`, marks everything recursively.
 function Methods:__sync(k, rec)
