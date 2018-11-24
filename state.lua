@@ -40,7 +40,7 @@ local Methods = {}
 local proxies = setmetatable({}, { __mode = 'k' })
 
 
--- `pairs`, `ipairs` wrappers for nodes
+-- `pairs`, `ipairs` wrappers for nodes -- also set in `portal.globals` for ghost / castle engine
 
 local oldPairs = pairs
 function pairs(t)
@@ -48,6 +48,7 @@ function pairs(t)
     if not proxy then return oldPairs(t) end
     return oldPairs(proxy.children)
 end
+if portal then portal.globals.pairs = pairs end
 local pairs = oldPairs
 
 local oldIPairs = ipairs
@@ -56,6 +57,7 @@ function ipairs(t)
     if not proxy then return oldIPairs(t) end
     return oldIPairs(proxy.children)
 end
+if portal then portal.globals.ipairs = ipairs end
 local ipairs = oldIPairs
 
 
