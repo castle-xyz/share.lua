@@ -23,6 +23,15 @@ do
     local idToPeer = {}
     local nextId = 1
 
+    function server.useCastleServer()
+        if castle then
+            function castle.startServer(port)
+                server.enabled = true
+                server.start(port)
+            end
+        end
+    end
+
     function server.start(port)
         host = enet.host_create('*:' .. tostring(port or '22122'))
         if host == nil then
@@ -155,6 +164,15 @@ do
 
     local host
     local peer
+
+    function client.useCastleServer()
+        if castle then
+            function castle.startClient(address)
+                client.enabled = true
+                client.start(address)
+            end
+        end
+    end
 
     function client.start(address)
         host = enet.host_create()

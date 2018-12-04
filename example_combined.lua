@@ -1,5 +1,6 @@
 -- This runs both the client and server in the same process for easy testing
 
+USE_LOCAL_SERVER = false
 require 'example_server'
 require 'example_client'
 

@@ -1,9 +1,12 @@
 local cs = require 'cs'
 local server = cs.server
 
-
-server.enabled = true
-server.start('22122') -- Port of server
+if USE_LOCAL_SERVER then
+    server.enabled = true
+    server.start('22122') -- Port of server
+else
+    server.useCastleServer()
+end
 
 
 -- Server has many clients connecting to it. Each client has a unique `id` to identify it.

@@ -1,9 +1,12 @@
 local cs = require 'cs'
 local client = cs.client
 
-
-client.enabled = true
-client.start('127.0.0.1:22122') -- IP address ('127.0.0.1' is same computer) and port of server
+if USE_LOCAL_SERVER then
+    client.enabled = true
+    client.start('127.0.0.1:22122') -- IP address ('127.0.0.1' is same computer) and port of server
+else
+    client.useCastleServer()
+end
 
 
 -- Client connects to server. It gets a unique `id` to identify it.
