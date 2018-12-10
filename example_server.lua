@@ -1,11 +1,11 @@
 local cs = require 'cs'
 local server = cs.server
 
-if USE_LOCAL_SERVER then
+if USE_CASTLE_CONFIG then
+    server.useCastleConfig()
+else
     server.enabled = true
     server.start('22122') -- Port of server
-else
-    server.useCastleServer()
 end
 
 

@@ -1,11 +1,11 @@
 local cs = require 'cs'
 local client = cs.client
 
-if USE_LOCAL_SERVER then
+if USE_CASTLE_CONFIG then
+    client.useCastleConfig()
+else
     client.enabled = true
     client.start('127.0.0.1:22122') -- IP address ('127.0.0.1' is same computer) and port of server
-else
-    client.useCastleServer()
 end
 
 

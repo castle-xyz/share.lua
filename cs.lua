@@ -23,7 +23,7 @@ do
     local idToPeer = {}
     local nextId = 1
 
-    function server.useCastleServer()
+    function server.useCastleConfig()
         if castle then
             function castle.startServer(port)
                 server.enabled = true
@@ -32,12 +32,19 @@ do
         end
     end
 
+    local useCompression = true
+    function server.disableCompression()
+        useCompression = false
+    end
+
     function server.start(port)
         host = enet.host_create('*:' .. tostring(port or '22122'))
         if host == nil then
             error("couldn't start server -- is port in use?")
         end
-        host:compress_with_range_coder()
+        if useCompression then
+            host:compress_with_range_coder()
+        end
         server.started = true
     end
 
@@ -169,7 +176,7 @@ do
     local host
     local peer
 
-    function client.useCastleServer()
+    function client.useCastleConfig()
         if castle then
             function castle.startClient(address)
                 client.enabled = true
@@ -178,9 +185,16 @@ do
         end
     end
 
+    local useCompression = true
+    function client.disableCompression()
+        useCompression = false
+    end
+
     function client.start(address)
         host = enet.host_create()
-        host:compress_with_range_coder()
+        if useCompression then
+            host:compress_with_range_coder()
+        end
         host:connect(address or '127.0.0.1:22122')
     end
 
