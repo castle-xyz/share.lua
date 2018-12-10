@@ -50,6 +50,10 @@ do
         end
     end
 
+    function server.kick(id)
+        assert(idToPeer[id], 'no connected client with this `id`'):disconnect()
+    end
+
     function server.getPing(id)
         return assert(idToPeer[id], 'no connected client with this `id`'):round_trip_time()
     end
@@ -186,6 +190,10 @@ do
         }))
     end
 
+    function client.kick()
+        assert(peer, 'client is not connected'):disconnect()
+    end
+
     function client.getPing()
         return assert(peer, 'client is not connected'):round_trip_time()
     end
@@ -194,6 +202,7 @@ do
         -- Process network events
         if host then
             while true do
+                if not host then break end
                 local event = host:service(0)
                 if not event then break end
 
@@ -207,6 +216,16 @@ do
                     if client.disconnect then
                         client.disconnect()
                     end
+                    client.connected = false
+                    client.id = nil
+                    for k in pairs(share) do
+                        share[k] = nil
+                    end
+                    for k in pairs(home) do
+                        home[k] = nil
+                    end
+                    host = nil
+                    peer = nil
                 end
 
                 -- Received a request?

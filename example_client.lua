@@ -23,6 +23,8 @@ local home = client.home -- Maps to `server.homes[id]` with our `id` -- can writ
 
 
 function client.connect() -- Called on connect from server
+    home.mouse = {}
+    home.mouse.x, home.mouse.y = love.mouse.getPosition()
 end
 
 function client.disconnect() -- Called on disconnect from server
@@ -35,12 +37,12 @@ end
 -- Client gets all Love events
 
 function client.load()
-    home.mouse = {}
-    home.mouse.x, home.mouse.y = love.mouse.getPosition()
 end
 
 function client.update(dt)
-    home.mouse.x, home.mouse.y = love.mouse.getPosition()
+    if client.connected then
+        home.mouse.x, home.mouse.y = love.mouse.getPosition()
+    end
 end
 
 function client.draw()
