@@ -206,6 +206,7 @@ do
 
     function client.kick()
         assert(peer, 'client is not connected'):disconnect()
+        host:flush()
     end
 
     function client.getPing()
@@ -375,6 +376,9 @@ for cbName, where in pairs(loveCbs) do
             end
             if cbName == 'update' then
                 client.postupdate(...)
+            end
+            if cbName == 'quit' then
+                client.kick()
             end
         end
     end

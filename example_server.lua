@@ -24,9 +24,12 @@ local homes = server.homes -- `homes[id]` maps to `client.home` for that `id` --
 
 
 function server.connect(id) -- Called on connect from client with `id`
+    print('client ' .. id .. ' connected')
 end
 
 function server.disconnect(id) -- Called on disconnect from client with `id`
+    print('client ' .. id .. ' disconnected')
+    share.mice[id] = nil
 end
 
 function server.receive(id, ...) -- Called when client with `id` does `client.send(...)`
