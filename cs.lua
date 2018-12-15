@@ -164,8 +164,10 @@ do
         if host then
             host:flush() -- Tell ENet to send outgoing messages
         end
-        
-        C.ghostHeartbeat(numConnectedPeers)
+
+        if CASTLE_SERVER then -- On dedicated servers we need to periodically say we're alive
+            C.ghostHeartbeat(numConnectedPeers)
+        end
     end
 end
 
