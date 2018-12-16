@@ -6,15 +6,20 @@ local marshal = require 'marshal' -- Serialization
 local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239f25997b101c585c0daf6a15b7e37fad9/src/serpent.lua'
 local ffi = require 'ffi'
 ffi.cdef[[
-void ghostHeartbeat(int numConnectedPeers);
+void ghostHeartbeat(int numClients);
+void ghostSetIsAcceptingPlayers(bool isAcceptingPlayers);
 ]]
 local C = ffi.C
+
+
+local MAX_MAX_CLIENTS = 64
 
 
 local server = {}
 do
     server.enabled = false
     server.started = false
+    server.maxClients = MAX_MAX_CLIENTS
 
     local share = state.new()
     share:__autoSync(true)
@@ -26,7 +31,7 @@ do
     local peerToId = {}
     local idToPeer = {}
     local nextId = 1
-    local numConnectedPeers = 0
+    local numClients = 0
 
     function server.useCastleConfig()
         if castle then
@@ -43,7 +48,7 @@ do
     end
 
     function server.start(port)
-        host = enet.host_create('*:' .. tostring(port or '22122'))
+        host = enet.host_create('*:' .. tostring(port or '22122'), MAX_MAX_CLIENTS)
         if host == nil then
             error("couldn't start server -- is port in use?")
         end
@@ -79,71 +84,84 @@ do
 
                 -- Someone connected?
                 if event.type == 'connect' then
-                    local id = nextId
-                    nextId = nextId + 1
-                    peerToId[event.peer] = id
-                    idToPeer[id] = event.peer
-                    homes[id] = {}
-                    numConnectedPeers = numConnectedPeers + 1
-                    if server.connect then
-                        server.connect(id)
+                    if numClients < server.maxClients then
+                        local id = nextId
+                        nextId = nextId + 1
+                        peerToId[event.peer] = id
+                        idToPeer[id] = event.peer
+                        homes[id] = {}
+                        numClients = numClients + 1
+                        if CASTLE_SERVER then
+                            C.ghostSetIsAcceptingPlayers(numClients < server.maxClients)
+                        end
+                        if server.connect then
+                            server.connect(id)
+                        end
+                        event.peer:send(marshal.encode({
+                            id = id,
+                            exact = share:__diff(id, true),
+                        }))
+                    else
+                        event.peer:send(marshal.encode({ full = true }))
+                        event.peer:disconnect_later()
                     end
-                    event.peer:send(marshal.encode({
-                        id = id,
-                        exact = share:__diff(id, true),
-                    }))
                 end
 
                 -- Someone disconnected?
                 if event.type == 'disconnect' then
                     local id = peerToId[event.peer]
-                    if server.disconnect then
-                        server.disconnect(id)
+                    if id then
+                        if server.disconnect then
+                            server.disconnect(id)
+                        end
+                        homes[id] = nil
+                        idToPeer[id] = nil
+                        peerToId[event.peer] = nil
+                        numClients = numClients - 1
+                        if CASTLE_SERVER then
+                            C.ghostSetIsAcceptingPlayers(numClients < server.maxClients)
+                        end
                     end
-                    homes[id] = nil
-                    idToPeer[id] = nil
-                    peerToId[event.peer] = nil
-                    numConnectedPeers = numConnectedPeers - 1
                 end
 
                 -- Received a request?
                 if event.type == 'receive' then
                     local id = peerToId[event.peer]
-                    local request = marshal.decode(event.data)
+                    if id then
+                        local request = marshal.decode(event.data)
 
-                    -- Message?
-                    if request.message then
-                        if server.receive then
+                        -- Message?
+                        if request.message and server.receive then
                             server.receive(id, unpack(request.message, 1, request.message.nArgs))
                         end
-                    end
 
-                    -- Diff / exact?
-                    if request.diff then
-                        if server.changing then
-                            server.changing(id, request.diff)
-                        end
-                        assert(state.apply(homes[id], request.diff) == homes[id])
-                        if server.changed then
-                            server.changed(id, request.diff)
-                        end
-                    end
-                    if request.exact then -- `state.apply` may return a new value
-                        if server.changing then
-                            server.changing(id, request.exact)
-                        end
-                        local home = homes[id]
-                        local new = state.apply(home, request.exact)
-                        for k, v in pairs(new) do
-                            home[k] = v
-                        end
-                        for k in pairs(home) do
-                            if not new[k] then
-                                home[k] = nil
+                        -- Diff / exact?
+                        if request.diff then
+                            if server.changing then
+                                server.changing(id, request.diff)
+                            end
+                            assert(state.apply(homes[id], request.diff) == homes[id])
+                            if server.changed then
+                                server.changed(id, request.diff)
                             end
                         end
-                        if server.changed then
-                            server.changed(id, request.exact)
+                        if request.exact then -- `state.apply` may return a new value
+                            if server.changing then
+                                server.changing(id, request.exact)
+                            end
+                            local home = homes[id]
+                            local new = state.apply(home, request.exact)
+                            for k, v in pairs(new) do
+                                home[k] = v
+                            end
+                            for k in pairs(home) do
+                                if not new[k] then
+                                    home[k] = nil
+                                end
+                            end
+                            if server.changed then
+                                server.changed(id, request.exact)
+                            end
                         end
                     end
                 end
@@ -166,7 +184,7 @@ do
         end
 
         if CASTLE_SERVER then -- On dedicated servers we need to periodically say we're alive
-            C.ghostHeartbeat(numConnectedPeers)
+            C.ghostHeartbeat(numClients)
         end
     end
 end
@@ -303,6 +321,16 @@ do
                         end
                         peer:send(marshal.encode({ exact = home:__diff(0, true) }))
                     end
+
+                    -- Full?
+                    if request.full then
+                        if client.full then
+                            client.full()
+                        end
+                        if castle and castle.connectionFailed then
+                            castle.connectionFailed('full')
+                        end
+                    end
                 end
             end
         end
@@ -388,7 +416,7 @@ for cbName, where in pairs(loveCbs) do
             if cbName == 'update' then
                 client.postupdate(...)
             end
-            if cbName == 'quit' then
+            if cbName == 'quit' and client.connected then
                 client.kick()
             end
         end
