@@ -28,6 +28,11 @@ function client.connect() -- Called on connect from server
 end
 
 function client.disconnect() -- Called on disconnect from server
+    print('client: disconnect')
+end
+
+function client.full()
+    print('client: full')
 end
 
 function client.receive(...) -- Called when server does `server.send(id, ...)` with our `id`
