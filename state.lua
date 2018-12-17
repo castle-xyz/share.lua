@@ -12,6 +12,9 @@ local DIFF_NIL = '__NIL' -- Sentinel to encode `nil`-ing in diffs -- TODO(nikki)
 local function nonempty(t) return next(t) ~= nil end
 
 
+local function serializable(v) return type(v) ~= 'userdata' end
+
+
 local Methods = {}
 
 
@@ -267,7 +270,7 @@ function Methods:__diff(client, exact, alreadyExact, caches)
                         if not exact then
                             ret[k] = DIFF_NIL
                         end
-                    else
+                    elseif serializable(v) then
                         ret[k] = v
                     end
                 end
@@ -288,7 +291,7 @@ function Methods:__diff(client, exact, alreadyExact, caches)
                     ret[k] = v:__diff(client, exact, alreadyExact, caches)
                 elseif v == nil then -- This can only happen if `not exact`
                     ret[k] = DIFF_NIL
-                else
+                elseif serializable(v) then
                     ret[k] = v
                 end
             end
