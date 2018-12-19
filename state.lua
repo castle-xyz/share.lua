@@ -335,6 +335,13 @@ function Methods:__flush(getDiff, client)
         local lastRelevancies = proxy.lastRelevancies
         for client in pairs(nextRelevancies) do
             lastRelevancies[client] = nextRelevancies[client]
+        end
+        for client in pairs(lastRelevancies) do
+            if not nextRelevancies[client] then
+                lastRelevancies[client] = nil
+            end
+        end
+        for client in pairs(nextRelevancies) do
             nextRelevancies[client] = nil
         end
     end
