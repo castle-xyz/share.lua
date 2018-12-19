@@ -842,6 +842,132 @@ local function testAutoApplyRelevanceNested()
 end
 
 
+-- `nil`-out a table with reference
+local function testAutoApplyRelevanceNilling()
+    local root = state.new()
+    root:__autoSync(true)
+
+    local relevance = function(self, client)
+        local ret = {}
+        for k, v in pairs(self) do
+            if (type(v) == 'table' or state.isState(v)) and v[client] then
+                ret[k] = true
+            elseif type(v) == 'boolean' then
+                ret[k] = true
+            end
+        end
+        return ret
+    end
+
+    -- We will have relevance that chooses groups at root, and relevance that chooses elements
+    -- within groups in at groups.
+    root:__relevance(relevance)
+    root.group1 = {}
+    root.group1:__relevance(relevance)
+    root.group2 = {}
+    root.group2:__relevance(relevance)
+    root.group3 = {}
+    root.group3:__relevance(relevance)
+
+    local targetA, targetB = {}, {}
+
+    do -- SETUP
+        -- Start
+        targetA = state.apply(targetA, root:__diff('a', true))
+        targetB = state.apply(targetA, root:__diff('b', true))
+        root:__flush()
+        assert(equal(targetA, {
+        }))
+        assert(equal(targetB, {
+        }))
+
+        -- Make a group relevant
+        root.group1.a = true
+        targetA = state.apply(targetA, root:__diff('a'))
+        targetB = state.apply(targetB, root:__diff('b'))
+        root:__flush()
+        assert(equal(targetA, {
+            group1 = { a = true },
+        }))
+        assert(equal(targetB, {
+        }))
+
+        -- Add stuff in group
+        root.group1[1] = { a = true, b = true }
+        root.group1[2] = { b = true }
+        targetA = state.apply(targetA, root:__diff('a'))
+        targetB = state.apply(targetB, root:__diff('b'))
+        root:__flush()
+        assert(equal(targetA, {
+            group1 = {
+                a = true,
+                [1] = { a = true, b = true },
+            },
+        }))
+        assert(equal(targetB, {
+        }))
+
+        -- Make it relevant to other client
+        root.group1.b = true
+        targetA = state.apply(targetA, root:__diff('a'))
+        targetB = state.apply(targetB, root:__diff('b'))
+        root:__flush()
+        assert(equal(targetA, {
+            group1 = {
+                a = true, b = true,
+                [1] = { a = true, b = true },
+            },
+        }))
+        assert(equal(targetB, {
+            group1 = {
+                a = true, b = true,
+                [1] = { a = true, b = true },
+                [2] = { b = true },
+            },
+        }))
+
+        -- Add in other group
+        root.group2.b = true
+        root.group2[1] = { a = true, b = true }
+        targetA = state.apply(targetA, root:__diff('a'))
+        targetB = state.apply(targetB, root:__diff('b'))
+        root:__flush()
+        assert(equal(targetA, {
+            group1 = {
+                a = true, b = true,
+                [1] = { a = true, b = true },
+            },
+        }))
+        assert(equal(targetB, {
+            group1 = {
+                a = true, b = true,
+                [1] = { a = true, b = true },
+                [2] = { b = true },
+            },
+            group2 = {
+                b = true,
+                [1] = { a = true, b = true },
+            }
+        }))
+    end
+
+    do -- ACTUAL TEST
+        -- Make an element with relevance inside `nil`
+        root.group1 = nil
+        targetA = state.apply(targetA, root:__diff('a'))
+        targetB = state.apply(targetB, root:__diff('b'))
+        root:__flush()
+        assert(equal(targetA, {
+        }))
+        assert(equal(targetB, {
+            group2 = {
+                b = true,
+                [1] = { a = true, b = true },
+            }
+        }))
+    end
+end
+
 testBasic()
 testSync()
 testAutoSync()
@@ -850,6 +976,7 @@ testAutoApply()
 testAutoApplyRelevance()
 testAutoApplyRelevanceAtRoot()
 testAutoApplyRelevanceNested()
+testAutoApplyRelevanceNilling()
 
 
 print('no errors? then everything passed...')
