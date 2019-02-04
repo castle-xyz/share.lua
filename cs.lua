@@ -4,12 +4,6 @@ local state = require 'state'
 local enet = require 'enet' -- Network
 local marshal = require 'marshal' -- Serialization
 local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239f25997b101c585c0daf6a15b7e37fad9/src/serpent.lua'
-local ffi = require 'ffi'
-ffi.cdef[[
-void ghostHeartbeat(int numClients);
-void ghostSetIsAcceptingPlayers(bool isAcceptingPlayers);
-]]
-local C = ffi.C
 
 
 local MAX_MAX_CLIENTS = 64
@@ -20,6 +14,7 @@ do
     server.enabled = false
     server.started = false
     server.maxClients = MAX_MAX_CLIENTS
+    server.isAcceptingClients = true
 
     local share = state.new()
     share:__autoSync(true)
@@ -92,7 +87,8 @@ do
                         homes[id] = {}
                         numClients = numClients + 1
                         if CASTLE_SERVER then
-                            C.ghostSetIsAcceptingPlayers(numClients < server.maxClients)
+                            castle.setIsAcceptingClients(server.isAcceptingClients and
+                                    numClients < server.maxClients)
                         end
                         if server.connect then
                             server.connect(id)
@@ -119,7 +115,8 @@ do
                         peerToId[event.peer] = nil
                         numClients = numClients - 1
                         if CASTLE_SERVER then
-                            C.ghostSetIsAcceptingPlayers(numClients < server.maxClients)
+                            castle.setIsAcceptingClients(server.isAcceptingClients and
+                                    numClients < server.maxClients)
                         end
                     end
                 end
@@ -184,7 +181,7 @@ do
         end
 
         if CASTLE_SERVER then -- On dedicated servers we need to periodically say we're alive
-            C.ghostHeartbeat(numClients)
+            castle.heartbeat(numClients)
         end
     end
 end
