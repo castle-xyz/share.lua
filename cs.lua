@@ -420,6 +420,22 @@ for cbName, where in pairs(loveCbs) do
     end
 end
 
+function castle.backgroundupdate(...)
+    if server.enabled then
+        server.preupdate(...)
+        if server.backgroundupdate then
+            server.backgroundupdate(...)
+        end
+        server.postupdate(...)
+    end
+    if client.enabled then
+        client.preupdate(...)
+        if client.backgroundupdate then
+            client.backgroundupdate(...)
+        end
+        client.postupdate(...)
+    end
+end
 
 return {
     server = server,
