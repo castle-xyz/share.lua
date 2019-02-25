@@ -37,8 +37,7 @@ local Methods = {}
 --  The following are non-`nil` only if this exact node has relevance
 --
 --    `.relevance`: the relevance function if given, `true` if some descendant has one, else `nil`
---    `.lastRelevancies`: `client` -> `k` -> non-`nil` map for relevancies before flush
---    `.nextRelevancies`: `client` -> `k` -> non-`nil` map for relevancies till next flush
+--    `.lastRelevancies`: `client` -> `k` -> non-`nil` map for results of last call to `.relevance`
 --
 local proxies = setmetatable({}, { __mode = 'k' })
 
@@ -96,7 +95,6 @@ local function adopt(parent, name, t)
         proxy.autoSync = false
         proxy.relevance = nil
         proxy.lastRelevancies = nil
-        proxy.nextRelevancies = nil
         proxy.relevanceDescs = nil
         proxy.caches = nil
 
@@ -258,7 +256,6 @@ function Methods:__diff(client, exact, alreadyExact, caches)
             -- In the below we make sure not to put `DIFF_NIL`s in an exact diff
             local lastRelevancy = proxy.lastRelevancies[client]
             local relevancy = relevance(self, client)
-            proxy.nextRelevancies[client] = relevancy
             for k in pairs(relevancy) do
                 -- Send exact if it was previously irrelevant and just became relevant
                 local exactHere = exact or (not lastRelevancy or not lastRelevancy[k])
@@ -284,6 +281,7 @@ function Methods:__diff(client, exact, alreadyExact, caches)
                     end
                 end
             end
+            proxy.lastRelevancies[client] = relevancy
         else -- No relevance function -- if `exact` go through all children, else just `dirty` ones
             for k in pairs(exact and children or dirty) do
                 local v = children[k]
@@ -328,23 +326,6 @@ function Methods:__flush(getDiff, client)
 
     -- Reset caches
     proxy.caches = nil
-
-    -- Transer relevancy info to `.lastRelevancies`
-    local nextRelevancies = proxy.nextRelevancies
-    if nextRelevancies then
-        local lastRelevancies = proxy.lastRelevancies
-        for client in pairs(nextRelevancies) do
-            lastRelevancies[client] = nextRelevancies[client]
-        end
-        for client in pairs(lastRelevancies) do
-            if not nextRelevancies[client] then
-                lastRelevancies[client] = nil
-            end
-        end
-        for client in pairs(nextRelevancies) do
-            nextRelevancies[client] = nil
-        end
-    end
 
     return diff
 end
@@ -407,7 +388,6 @@ function Methods:__relevance(relevance)
     -- Set up relevance data for this node
     proxy.relevance = relevance
     proxy.lastRelevancies = setmetatable({}, { __mode = 'k' })
-    proxy.nextRelevancies = setmetatable({}, { __mode = 'k' })
 end
 
 
