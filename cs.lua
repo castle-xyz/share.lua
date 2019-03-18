@@ -15,6 +15,7 @@ do
     server.started = false
     server.maxClients = MAX_MAX_CLIENTS
     server.isAcceptingClients = true
+    server.sendRate = 35
 
     local share = state.new()
     share:__autoSync(true)
@@ -166,7 +167,15 @@ do
         end
     end
 
-    function server.postupdate()
+    local timeSinceLastUpdate = 0
+
+    function server.postupdate(dt)
+        timeSinceLastUpdate = timeSinceLastUpdate + dt
+        if timeSinceLastUpdate < 1 / server.sendRate then
+            return
+        end
+        timeSinceLastUpdate = 0
+
         -- Send state updates to everyone
         for peer, id in pairs(peerToId) do
             local diff = share:__diff(id)
@@ -192,6 +201,7 @@ do
     client.enabled = false
     client.connected = false
     client.id = nil
+    client.sendRate = 35
 
     local share = {}
     client.share = share
@@ -333,7 +343,15 @@ do
         end
     end
 
+    local timeSinceLastUpdate = 0
+
     function client.postupdate(dt)
+        timeSinceLastUpdate = timeSinceLastUpdate + dt
+        if timeSinceLastUpdate < 1 / client.sendRate then
+            return
+        end
+        timeSinceLastUpdate = 0
+
         -- Send state updates to server
         if peer then
             local diff = home:__diff(0)
