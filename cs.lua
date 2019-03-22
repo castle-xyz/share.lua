@@ -16,6 +16,7 @@ do
     server.maxClients = MAX_MAX_CLIENTS
     server.isAcceptingClients = true
     server.sendRate = 35
+    server.numChannels = 1
 
     local share = state.new()
     share:__autoSync(true)
@@ -44,7 +45,7 @@ do
     end
 
     function server.start(port)
-        host = enet.host_create('*:' .. tostring(port or '22122'), MAX_MAX_CLIENTS)
+        host = enet.host_create('*:' .. tostring(port or '22122'), MAX_MAX_CLIENTS, server.numChannels)
         if host == nil then
             error("couldn't start server -- is port in use?")
         end
@@ -54,13 +55,17 @@ do
         server.started = true
     end
 
-    function server.send(id, ...)
+    function server.sendExt(id, channel, flag, ...)
         local data = marshal.encode({ message = { nArgs = select('#', ...), ... } })
         if id == 'all' then
-            host:broadcast(data)
+            host:broadcast(data, channel, flag)
         else
-            assert(idToPeer[id], 'no connected client with this `id`'):send(data)
+            assert(idToPeer[id], 'no connected client with this `id`'):send(data, channel, flag)
         end
+    end
+
+    function server.send(id, ...)
+        server.send(id, nil, nil, ...)
     end
 
     function server.kick(id)
@@ -69,6 +74,14 @@ do
 
     function server.getPing(id)
         return assert(idToPeer[id], 'no connected client with this `id`'):round_trip_time()
+    end
+
+    function server.getENetHost()
+        return host
+    end
+
+    function server.getENetPeer(id)
+        return idToPeer[id]
     end
 
     function server.preupdate()
@@ -202,6 +215,7 @@ do
     client.connected = false
     client.id = nil
     client.sendRate = 35
+    client.numChannels = 1
 
     local share = {}
     client.share = share
@@ -227,17 +241,21 @@ do
     end
 
     function client.start(address)
-        host = enet.host_create()
+        host = enet.host_create(nil, 1, client.numChannels)
         if useCompression then
             host:compress_with_range_coder()
         end
         host:connect(address or '127.0.0.1:22122')
     end
 
-    function client.send(...)
+    function client.sendExt(channel, flag, ...)
         assert(peer, 'client is not connected'):send(marshal.encode({
             message = { nArgs = select('#', ...), ... },
-        }))
+        }), channel, flag)
+    end
+
+    function client.send(...)
+        client.sendExt(nil, nil, ...)
     end
 
     function client.kick()
@@ -247,6 +265,14 @@ do
 
     function client.getPing()
         return assert(peer, 'client is not connected'):round_trip_time()
+    end
+
+    function client.getENetHost()
+        return host
+    end
+
+    function client.getENetPeer()
+        return peer
     end
 
     function client.preupdate(dt)
