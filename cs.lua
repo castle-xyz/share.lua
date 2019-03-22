@@ -12,11 +12,13 @@ local MAX_MAX_CLIENTS = 64
 local server = {}
 do
     server.enabled = false
-    server.started = false
     server.maxClients = MAX_MAX_CLIENTS
     server.isAcceptingClients = true
     server.sendRate = 35
     server.numChannels = 1
+
+    server.started = false
+    server.backgrounded = false
 
     local share = state.new()
     share:__autoSync(true)
@@ -212,10 +214,12 @@ end
 local client = {}
 do
     client.enabled = false
-    client.connected = false
-    client.id = nil
     client.sendRate = 35
     client.numChannels = 1
+
+    client.connected = false
+    client.id = nil
+    client.backgrounded = false
 
     local share = {}
     client.share = share
@@ -436,6 +440,7 @@ for cbName, where in pairs(loveCbs) do
     love[cbName] = function(...)
         if where.server and server.enabled then
             if cbName == 'update' then
+                server.backgrounded = false
                 server.preupdate(...)
             end
             local serverCb = server[cbName]
@@ -448,6 +453,7 @@ for cbName, where in pairs(loveCbs) do
         end
         if where.client and client.enabled then
             if cbName == 'update' then
+                client.backgrounded = false
                 client.preupdate(...)
             end
             local clientCb = client[cbName]
@@ -466,16 +472,18 @@ end
 
 function castle.backgroundupdate(...)
     if server.enabled then
+        server.backgrounded = true
         server.preupdate(...)
-        if server.backgroundupdate then
-            server.backgroundupdate(...)
+        if server.update then
+            server.update(...)
         end
         server.postupdate(...)
     end
     if client.enabled then
+        client.backgrounded = true
         client.preupdate(...)
-        if client.backgroundupdate then
-            client.backgroundupdate(...)
+        if client.update then
+            client.update(...)
         end
         client.postupdate(...)
     end
