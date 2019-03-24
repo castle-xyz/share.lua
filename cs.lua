@@ -67,7 +67,7 @@ do
     end
 
     function server.send(id, ...)
-        server.send(id, nil, nil, ...)
+        server.sendExt(id, nil, nil, ...)
     end
 
     function server.kick(id)
