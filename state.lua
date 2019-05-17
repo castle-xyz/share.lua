@@ -116,14 +116,14 @@ local function adopt(parent, name, t)
                     local vChildren = vProxy and vProxy.children or v
                     local nSame, nNew, nRemove = 0, 0, 0
                     for kp in pairs(vChildren) do
-                        if childChildren[kp] then
+                        if childChildren[kp] ~= nil then
                             nSame = nSame + 1
                         else
                             nNew = nNew + 1
                         end
                     end
                     for kp in pairs(childChildren) do
-                        if not vChildren[kp] then
+                        if vChildren[kp] == nil then
                             nRemove = nRemove + 1
                         end
                     end
@@ -134,7 +134,7 @@ local function adopt(parent, name, t)
                             child[kp] = vp
                         end
                         for kp in pairs(childChildren) do
-                            if not vChildren[kp] then
+                            if vChildren[kp] == nil then
                                 child[kp] = nil
                             end
                         end
