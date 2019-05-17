@@ -72,7 +72,8 @@ local function adopt(parent, name, t)
     if proxies[t] then -- Was already a node -- make sure it's orphaned and reuse
         node, proxy = t, proxies[t]
         assert(proxy.parent, 'tried to adopt a root node')
-        assert(proxies[proxy.parent].children[proxy.name] ~= t, 'tried to adopt an adopted node')
+        -- NOTE: For now, allowing this...
+        -- assert(proxies[proxy.parent].children[proxy.name] ~= t, 'tried to adopt an adopted node')
     else -- New node
         assert(not getmetatable(t), 'tried to adopt a table that has a metatable')
         node = newproxy(true)
