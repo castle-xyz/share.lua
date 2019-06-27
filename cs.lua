@@ -49,7 +49,8 @@ do
     function server.start(port)
         host = enet.host_create('*:' .. tostring(port or '22122'), MAX_MAX_CLIENTS, server.numChannels)
         if host == nil then
-            error("couldn't start server -- is port in use?")
+            print("couldn't start server -- is port in use?")
+            return
         end
         if useCompression then
             host:compress_with_range_coder()
