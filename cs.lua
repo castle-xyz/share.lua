@@ -490,6 +490,14 @@ function castle.backgroundupdate(...)
     end
 end
 
+function castle.uiupdate(...)
+    if client.enabled then
+        if client.uiupdate then
+            client.uiupdate(...)
+        end
+    end
+end
+
 return {
     server = server,
     client = client,
