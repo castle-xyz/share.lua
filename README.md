@@ -1,6 +1,6 @@
 # share.lua
 
-*share.lua* is a set of modules that aims to make it easier to make multiplayer games with Lua, especially with [LÖVE](https://love2d.org/) and [Castle](https://playcastle.io/). LÖVE provides the [lua-enet](http://leafo.net/lua-enet/) library that is used for network communication, and Castle provides the [lua-marshal](https://github.com/richardhundt/lua-marshal) library that is used for serialization. Castle can also be used to automatically run a game server in the cloud.
+*share.lua* is a set of modules that aims to make it easier to make multiplayer games with Lua, especially with [LÖVE](https://love2d.org/) and [Castle](https://playcastle.io/). LÖVE provides the [lua-enet](http://leafo.net/lua-enet/) library that is used for network communication. Castle can also be used to automatically run a game server in the cloud.
 
 Files in this repository:
 
