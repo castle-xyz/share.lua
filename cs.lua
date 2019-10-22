@@ -2,8 +2,13 @@ local state = require 'state'
 
 
 local enet = require 'enet' -- Network
-local marshal = require 'marshal' -- Serialization
+-- local marshal = require 'marshal' -- Serialization
 local serpent = require 'https://raw.githubusercontent.com/pkulchenko/serpent/522a6239f25997b101c585c0daf6a15b7e37fad9/src/serpent.lua'
+local bitser = require 'https://raw.githubusercontent.com/gvx/bitser/214ad35f62d5abbc0c9a421287aa0964f6f63003/bitser.lua'
+
+
+local encode = bitser.dumps
+local decode = bitser.loads
 
 
 local MAX_MAX_CLIENTS = 64
@@ -60,7 +65,7 @@ do
     end
 
     function server.sendExt(id, channel, flag, ...)
-        local data = marshal.encode({ message = { nArgs = select('#', ...), ... } })
+        local data = encode({ message = { nArgs = select('#', ...), ... } })
         if id == 'all' then
             host:broadcast(data, channel, flag)
         else
@@ -111,12 +116,12 @@ do
                         if server.connect then
                             server.connect(id)
                         end
-                        event.peer:send(marshal.encode({
+                        event.peer:send(encode({
                             id = id,
                             exact = share:__diff(id, true),
                         }))
                     else
-                        event.peer:send(marshal.encode({ full = true }))
+                        event.peer:send(encode({ full = true }))
                         event.peer:disconnect_later()
                     end
                 end
@@ -144,7 +149,7 @@ do
                 if event.type == 'receive' then
                     local id = peerToId[event.peer]
                     if id then
-                        local request = marshal.decode(event.data)
+                        local request = decode(event.data)
 
                         -- Session token?
                         if request.sessionToken then
@@ -203,7 +208,7 @@ do
         for peer, id in pairs(peerToId) do
             local diff = share:__diff(id)
             if diff ~= nil then -- `nil` if nothing changed
-                peer:send(marshal.encode({ diff = diff }))
+                peer:send(encode({ diff = diff }))
             end
         end
         share:__flush() -- Make sure to reset diff state after sending!
@@ -268,7 +273,7 @@ do
     end
 
     function client.sendExt(channel, flag, ...)
-        assert(peer, 'client is not connected'):send(marshal.encode({
+        assert(peer, 'client is not connected'):send(encode({
             message = { nArgs = select('#', ...), ... },
         }), channel, flag)
     end
@@ -326,7 +331,7 @@ do
 
                 -- Received a request?
                 if event.type == 'receive' then
-                    local request = marshal.decode(event.data)
+                    local request = decode(event.data)
 
                     -- Message?
                     if request.message then
@@ -373,7 +378,7 @@ do
                         end
 
                         -- Send sessionToken now that we have an id
-                        peer:send(marshal.encode({
+                        peer:send(encode({
                             sessionToken = client.sessionToken,
                             exact = home:__diff(0, true)
                         }))
@@ -406,7 +411,7 @@ do
         if peer then
             local diff = home:__diff(0)
             if diff ~= nil then -- `nil` if nothing changed
-                peer:send(marshal.encode({ diff = diff }))
+                peer:send(encode({ diff = diff }))
             end
         end
         home:__flush() -- Make sure to reset diff state after sending!
