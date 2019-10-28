@@ -269,7 +269,7 @@ do
         if useCompression then
             host:compress_with_range_coder()
         end
-        host:connect(address or '127.0.0.1:22122')
+        host:connect(address or '127.0.0.1:22122', client.numChannels)
     end
 
     function client.sendExt(channel, flag, ...)
